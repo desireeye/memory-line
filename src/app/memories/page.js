@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { getUserMemories } from '@/lib/database';
 import { motion } from 'framer-motion';
 import MemoryCard from '@/components/MemoryCard';
 
@@ -17,21 +16,7 @@ export default function MemoriesPage() {
       if (!user) return;
 
       try {
-        const memoriesRef = collection(db, 'memories');
-        // For personal memories, show all memories (both private and public)
-        const q = query(
-          memoriesRef,
-          where('userId', '==', user.uid),
-          orderBy('date', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        
-        const memoriesData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          date: doc.data().date // Ensure date is properly handled
-        }));
-
+        const memoriesData = await getUserMemories(user.uid);
         setMemories(memoriesData);
       } catch (error) {
         console.error('Error fetching memories:', error);
@@ -72,12 +57,9 @@ export default function MemoriesPage() {
       >
         <h1 className="text-3xl font-bold text-center mb-12">Your Memory Timeline</h1>
         
-        {/* Timeline container */}
         <div className="relative">
-          {/* Vertical timeline line */}
           <div className="absolute left-1/2 top-0 bottom-0 w-px bg-pastel-blue -z-10" />
           
-          {/* Memory cards */}
           {memories.map((memory, index) => (
             <MemoryCard key={memory.id} memory={memory} index={index} />
           ))}
