@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -241,8 +242,9 @@ export default function AddMemory() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Add New Memory</h1>
+    <ProtectedRoute>
+      <div className="max-w-2xl mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-6">Add New Memory</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
@@ -379,6 +381,7 @@ export default function AddMemory() {
           )}
         </div>
       </form>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }
