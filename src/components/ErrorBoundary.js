@@ -23,7 +23,7 @@ export default class ErrorBoundary extends Component {
           <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-lg">
             <h2 className="text-xl font-bold text-red-600 mb-4">Something went wrong</h2>
             <p className="text-gray-700 mb-4">
-              There was an error loading the application. This might be due to a Firebase configuration issue.
+              There was an error loading the application. Please check your configuration and try again.
             </p>
             <details className="mb-4">
               <summary className="cursor-pointer text-sm text-gray-600">Error details</summary>
