@@ -84,7 +84,10 @@ export default function AddMemory() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check if user is authenticated
     if (!user) {
+      console.log('No user found, redirecting to login');
       router.push('/login');
       return;
     }
@@ -109,6 +112,19 @@ export default function AddMemory() {
       return;
     }
 
+    // Check Firebase services
+    if (!storage) {
+      console.error('Firebase Storage is not initialized');
+      alert('Storage service is not available. Please refresh the page and try again.');
+      return;
+    }
+
+    if (!db) {
+      console.error('Firebase Firestore is not initialized');
+      alert('Database service is not available. Please refresh the page and try again.');
+      return;
+    }
+
     setIsLoading(true);
     setIsProcessing(true);
     setUploadError(null); // Clear any previous errors
@@ -119,6 +135,12 @@ export default function AddMemory() {
       type: mediaFile.type,
       size: mediaFile.size,
       userId: user.uid
+    });
+    
+    console.log('Firebase services status:', {
+      storage: !!storage,
+      db: !!db,
+      auth: !!user
     });
     
     try {
@@ -160,7 +182,11 @@ export default function AddMemory() {
                 });
               },
               (error) => {
-                console.error('Upload error:', error);
+                console.error('Upload error details:', {
+                  code: error.code,
+                  message: error.message,
+                  serverResponse: error.serverResponse
+                });
                 reject(error);
               },
               async () => {

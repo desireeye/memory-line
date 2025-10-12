@@ -10,5 +10,10 @@ service firebase.storage {
       allow update: if request.auth != null && request.auth.uid == userId;
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
+    
+    // Allow test uploads for debugging
+    match /test-uploads/{allPaths=**} {
+      allow read, write: if true;
+    }
   }
 }
