@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Upload Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .form-group { margin: 20px 0; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .status.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .preview { margin: 10px 0; }
+        .preview img { max-width: 300px; max-height: 300px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Simple Upload Test</h1>
+        <p>This page tests the basic file upload functionality without authentication.</p>
+        
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="fileInput">Select Image/Video:</label>
+                <input type="file" id="fileInput" accept="image/*,video/*" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="titleInput">Title:</label>
+                <input type="text" id="titleInput" placeholder="Enter title" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="descriptionInput">Description:</label>
+                <textarea id="descriptionInput" rows="4" placeholder="Enter description"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <button type="submit" class="btn" id="submitBtn">Test Upload</button>
+            </div>
+        </form>
+        
+        <div id="status"></div>
+        <div id="preview" class="preview"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const titleInput = document.getElementById('titleInput');
+        const descriptionInput = document.getElementById('descriptionInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        const previewDiv = document.getElementById('preview');
+
+        function showStatus(message, type = 'info') {
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function clearStatus() {
+            statusDiv.innerHTML = '';
+        }
+
+        // File input change handler
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Validate file type
+                const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime'];
+                if (!allowedTypes.includes(file.type)) {
+                    showStatus('Please select a valid image or video file (JPEG, PNG, GIF, WebP, MP4, WebM, QuickTime)', 'error');
+                    fileInput.value = '';
+                    return;
+                }
+
+                // Validate file size (50MB limit)
+                const maxSize = 50 * 1024 * 1024; // 50MB
+                if (file.size > maxSize) {
+                    showStatus('File size must be less than 50MB', 'error');
+                    fileInput.value = '';
+                    return;
+                }
+
+                showStatus(`File selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+
+                // Show preview for images
+                if (file.type.startsWith('image/')) {
+                    const url = URL.createObjectURL(file);
+                    previewDiv.innerHTML = `<img src="${url}" alt="Preview">`;
+                } else {
+                    previewDiv.innerHTML = `<p>Video file selected: ${file.name}</p>`;
+                }
+            }
+        });
+
+        // Form submit handler
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const file = fileInput.files[0];
+            const title = titleInput.value.trim();
+            const description = descriptionInput.value.trim();
+
+            if (!file || !title) {
+                showStatus('Please select a file and enter a title', 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            showStatus('Testing file validation and compression...', 'info');
+
+            try {
+                // Test file compression (simulate)
+                if (file.type.startsWith('image/') && file.size > 500000) {
+                    showStatus('Large image detected - would compress in real app...', 'info');
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate compression
+                }
+
+                // Test Firebase upload (simulate)
+                showStatus('Simulating Firebase upload...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate upload
+
+                showStatus('Upload test completed successfully! In a real app, this would upload to Firebase Storage.', 'success');
+                
+                // Reset form
+                fileInput.value = '';
+                titleInput.value = '';
+                descriptionInput.value = '';
+                previewDiv.innerHTML = '';
+
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Initial status
+        showStatus('Ready to test file upload functionality. Select a file to begin.', 'info');
+    </script>
+</body>
+</html>
