@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import ProtectedRoute from '@/components/ProtectedRoute';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -12,7 +11,7 @@ import { compressImage } from '@/utils/imageCompression';
 import UploadStatus from '@/components/UploadStatus';
 
 export default function AddMemory() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -241,10 +240,24 @@ export default function AddMemory() {
     }
   };
 
+  // Show loading while checking authentication
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pastel-blue"></div>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!user) {
+    router.push('/login');
+    return null;
+  }
+
   return (
-    <ProtectedRoute>
-      <div className="max-w-2xl mx-auto p-4">
-        <h1 className="text-3xl font-bold mb-6">Add New Memory</h1>
+    <div className="max-w-2xl mx-auto p-4">
+      <h1 className="text-3xl font-bold mb-6">Add New Memory</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
@@ -381,7 +394,6 @@ export default function AddMemory() {
           )}
         </div>
       </form>
-      </div>
-    </ProtectedRoute>
+    </div>
   );
 }
