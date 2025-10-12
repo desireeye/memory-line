@@ -1,7 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['firebasestorage.googleapis.com', 'www.gstatic.com'],
+    domains: ['www.gstatic.com', 'lh3.googleusercontent.com', 'images.unsplash.com'],
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.supabase.co' },
+      { protocol: 'https', hostname: '**.supabase.in' },
+    ],
   },
 }
 

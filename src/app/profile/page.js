@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { supabase } from '@/lib/supabaseClient';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 
@@ -31,21 +29,31 @@ export default function ProfilePage() {
       if (!user) return;
 
       try {
-        const profileRef = doc(db, 'users', user.uid);
-        const profileSnap = await getDoc(profileRef);
-
-        if (profileSnap.exists()) {
-          setProfileData(profileSnap.data());
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', user.uid)
+          .single();
+        if (error && error.code !== 'PGRST116') throw error;
+        if (data) {
+          setProfileData({
+            name: data.name || '',
+            bio: data.bio || '',
+            profilePhoto: data.profilePhoto || '',
+            isPublic: data.isPublic || false,
+            customUrl: data.customUrl || '',
+          });
         } else {
-          // Create default profile if it doesn't exist
           const defaultProfile = {
+            id: user.uid,
             name: user.displayName || '',
             bio: '',
             profilePhoto: user.photoURL || '',
             isPublic: false,
             customUrl: '',
           };
-          await updateDoc(profileRef, defaultProfile);
+          const { error: insertErr } = await supabase.from('users').insert([defaultProfile]);
+          if (insertErr) throw insertErr;
           setProfileData(defaultProfile);
         }
       } catch (error) {
@@ -82,16 +90,26 @@ export default function ProfilePage() {
       let photoUrl = profileData.profilePhoto;
 
       if (newProfilePhoto) {
-        const storageRef = ref(storage, `profiles/${user.uid}/${Date.now()}_${newProfilePhoto.name}`);
-        await uploadBytes(storageRef, newProfilePhoto);
-        photoUrl = await getDownloadURL(storageRef);
+        const path = `profiles/${user.uid}/${Date.now()}_${newProfilePhoto.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('profiles')
+          .upload(path, newProfilePhoto, { contentType: newProfilePhoto.type, upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('profiles').getPublicUrl(path);
+        photoUrl = urlData.publicUrl;
       }
 
-      const profileRef = doc(db, 'users', user.uid);
-      await updateDoc(profileRef, {
-        ...profileData,
-        profilePhoto: photoUrl,
-      });
+      const { error: upsertErr } = await supabase
+        .from('users')
+        .upsert({
+          id: user.uid,
+          name: profileData.name,
+          bio: profileData.bio,
+          profilePhoto: photoUrl,
+          isPublic: profileData.isPublic,
+          customUrl: profileData.customUrl,
+        });
+      if (upsertErr) throw upsertErr;
 
       setProfileData(prev => ({
         ...prev,
@@ -225,7 +243,7 @@ export default function ProfilePage() {
                   <div className="mt-4 p-4 bg-gray-50 rounded-md">
                     <h3 className="font-medium mb-2">Public Profile URL</h3>
                     <p className="text-sm text-gray-600">
-                      {`${window.location.origin}/${profileData.customUrl || user.uid}`}
+                  {`${typeof window !== 'undefined' ? window.location.origin : ''}/${profileData.customUrl || user.uid}`}
                     </p>
                   </div>
                 )}
