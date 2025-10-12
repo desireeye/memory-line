@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+// TODO: Replace with Supabase imports
+// import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import MemoryCard from '@/components/MemoryCard';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,59 +17,55 @@ export default function PublicTimeline({ params }) {
   useEffect(() => {
     const fetchUserAndMemories = async () => {
       try {
+        // TODO: Replace with Supabase queries
         // First, find the user by their custom URL or UID
-        const usersRef = collection(db, 'users');
-        const userQuery = query(
-          usersRef,
-          where('customUrl', '==', username)
-        );
-        let userSnapshot = await getDocs(userQuery);
+        // let { data: user, error: userError } = await supabase
+        //   .from('profiles')
+        //   .select('*')
+        //   .eq('custom_url', username)
+        //   .single();
         
-        // If no user found by customUrl, try by UID
-        if (userSnapshot.empty) {
-          const uidQuery = query(
-            usersRef,
-            where('uid', '==', username)
-          );
-          userSnapshot = await getDocs(uidQuery);
-        }
+        // // If no user found by customUrl, try by UID
+        // if (userError && userError.code === 'PGRST116') {
+        //   const { data: userByUid, error: uidError } = await supabase
+        //     .from('profiles')
+        //     .select('*')
+        //     .eq('user_id', username)
+        //     .single();
+        //   user = userByUid;
+        //   userError = uidError;
+        // }
 
-        if (userSnapshot.empty) {
-          setError('User not found');
-          setLoading(false);
-          return;
-        }
+        // if (userError) {
+        //   setError('User not found');
+        //   setLoading(false);
+        //   return;
+        // }
 
-        const userData = {
-          id: userSnapshot.docs[0].id,
-          ...userSnapshot.docs[0].data()
-        };
+        // // Check if profile is public
+        // if (!user.is_public) {
+        //   setError('This profile is private');
+        //   setLoading(false);
+        //   return;
+        // }
 
-        // Check if profile is public
-        if (!userData.isPublic) {
-          setError('This profile is private');
-          setLoading(false);
-          return;
-        }
+        // setUser(user);
 
-        setUser(userData);
+        // // Fetch the user's public memories
+        // const { data: memories, error: memoriesError } = await supabase
+        //   .from('memories')
+        //   .select('*')
+        //   .eq('user_id', user.user_id)
+        //   .eq('is_private', false)
+        //   .order('date', { ascending: false });
+        // if (memoriesError) throw memoriesError;
 
-        // Fetch the user's public memories
-        const memoriesRef = collection(db, 'memories');
-        const memoriesQuery = query(
-          memoriesRef,
-          where('userId', '==', userData.id),
-          where('isPrivate', '==', false),
-          orderBy('date', 'desc')
-        );
-
-        const memoriesSnapshot = await getDocs(memoriesQuery);
-        const memoriesData = memoriesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
-        setMemories(memoriesData);
+        // setMemories(memories || []);
+        
+        // For now, set empty state
+        setError('User not found');
+        setUser(null);
+        setMemories([]);
       } catch (error) {
         console.error('Error fetching timeline:', error);
         setError('Failed to load timeline');

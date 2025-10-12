@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+// TODO: Replace with Supabase imports
+// import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { format, getYear, parseISO } from 'date-fns';
@@ -20,21 +20,26 @@ export default function YearInReview() {
       if (!user) return;
 
       try {
-        const memoriesRef = collection(db, 'memories');
-        const q = query(memoriesRef, where('userId', '==', user.uid));
-        const snapshot = await getDocs(q);
+        // TODO: Replace with Supabase query
+        // const { data: memories, error } = await supabase
+        //   .from('memories')
+        //   .select('date')
+        //   .eq('user_id', user.uid);
+        // if (error) throw error;
         
-        const years = new Set();
-        snapshot.docs.forEach(doc => {
-          const memory = doc.data();
-          const year = getYear(parseISO(memory.date));
-          years.add(year);
-        });
+        // const years = new Set();
+        // memories.forEach(memory => {
+        //   const year = getYear(parseISO(memory.date));
+        //   years.add(year);
+        // });
 
-        setAvailableYears(Array.from(years).sort((a, b) => b - a));
-        if (years.size > 0 && !years.has(selectedYear)) {
-          setSelectedYear(Math.max(...years));
-        }
+        // setAvailableYears(Array.from(years).sort((a, b) => b - a));
+        // if (years.size > 0 && !years.has(selectedYear)) {
+        //   setSelectedYear(Math.max(...years));
+        // }
+        
+        // For now, set empty array
+        setAvailableYears([]);
       } catch (error) {
         console.error('Error fetching years:', error);
       }
@@ -49,69 +54,36 @@ export default function YearInReview() {
       
       setLoading(true);
       try {
-        const memoriesRef = collection(db, 'memories');
-        const startDate = `${selectedYear}-01-01`;
-        const endDate = `${selectedYear}-12-31`;
+        // TODO: Replace with Supabase queries
+        // const startDate = `${selectedYear}-01-01`;
+        // const endDate = `${selectedYear}-12-31`;
         
-        const q = query(
-          memoriesRef,
-          where('userId', '==', user.uid),
-          where('date', '>=', startDate),
-          where('date', '<=', endDate)
-        );
-        
-        const snapshot = await getDocs(q);
-        const memories = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        // const { data: memories, error } = await supabase
+        //   .from('memories')
+        //   .select('*')
+        //   .eq('user_id', user.uid)
+        //   .gte('date', startDate)
+        //   .lte('date', endDate)
+        //   .order('date', { ascending: false });
+        // if (error) throw error;
 
         // Calculate statistics
         const stats = {
-          totalMemories: memories.length,
+          totalMemories: 0,
           byMonth: Array(12).fill(0),
           topTags: {},
           mostReactedMemory: null,
           photoCount: 0,
           videoCount: 0,
-          memories: memories.sort((a, b) => b.date.localeCompare(a.date))
+          memories: []
         };
 
-        // Collect reactions for all memories
-        const reactionsRef = collection(db, 'reactions');
-        const reactionCounts = {};
-        
-        for (const memory of memories) {
-          // Count by month
-          const month = parseISO(memory.date).getMonth();
-          stats.byMonth[month]++;
-
-          // Count media types
-          if (memory.type === 'image') stats.photoCount++;
-          if (memory.type === 'video') stats.videoCount++;
-
-          // Count tags
-          memory.tags?.forEach(tag => {
-            stats.topTags[tag] = (stats.topTags[tag] || 0) + 1;
-          });
-
-          // Get reaction count
-          const reactionQuery = query(reactionsRef, where('memoryId', '==', memory.id));
-          const reactionSnapshot = await getDocs(reactionQuery);
-          reactionCounts[memory.id] = reactionSnapshot.size;
-        }
-
-        // Find most reacted memory
-        const mostReactedId = Object.entries(reactionCounts)
-          .sort(([, a], [, b]) => b - a)[0]?.[0];
-        
-        stats.mostReactedMemory = memories.find(m => m.id === mostReactedId);
-
-        // Sort tags by frequency
-        stats.topTags = Object.entries(stats.topTags)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 5)
-          .reduce((obj, [key, value]) => ({...obj, [key]: value}), {});
+        // TODO: Add reaction counting logic with Supabase
+        // const { data: reactions, error: reactionsError } = await supabase
+        //   .from('reactions')
+        //   .select('memory_id')
+        //   .in('memory_id', memories.map(m => m.id));
+        // if (reactionsError) throw reactionsError;
 
         setYearStats(stats);
       } catch (error) {

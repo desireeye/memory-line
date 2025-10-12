@@ -3,9 +3,8 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+// TODO: Replace with Supabase imports
+// import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
 import { compressImage } from '@/utils/imageCompression';
 import UploadStatus from '@/components/UploadStatus';
@@ -76,47 +75,37 @@ export default function AddMemory() {
             size: fileToUpload.size
           });
 
-          // Upload media to Firebase Storage
-          const fileName = `${Date.now()}_${mediaFile.name}`;
-          const storagePath = `memories/${user.uid}/${fileName}`;
-          console.log('Uploading to path:', storagePath);
+          // TODO: Replace with Supabase Storage
+          // const fileName = `${Date.now()}_${mediaFile.name}`;
+          // const { data, error } = await supabase.storage
+          //   .from('memories')
+          //   .upload(`${user.uid}/${fileName}`, fileToUpload);
+          // if (error) throw error;
+          // mediaUrl = data.path;
           
-          const storageRef = ref(storage, storagePath);
-          
-          // Create upload task
-          const uploadTask = uploadBytes(storageRef, fileToUpload);
-          
-          // Handle upload state
-          uploadTask.then((snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log('Upload progress:', progress.toFixed(2) + '%');
-          });
-          
-          const uploadResult = await uploadTask;
-          console.log('Upload completed:', uploadResult);
-          
-          mediaUrl = await getDownloadURL(storageRef);
-          console.log('File URL obtained:', mediaUrl);
+          console.log('File upload not implemented yet - using placeholder');
+          mediaUrl = 'placeholder-url';
         } catch (uploadError) {
           console.error('Error during file upload:', uploadError);
           throw new Error(`File upload failed: ${uploadError.message}`);
         }
       }
 
-      // Add memory to Firestore
+      // TODO: Replace with Supabase database operation
       const memoryData = {
-        userId: user.uid,
+        user_id: user.uid,
         title: formData.title,
         story: formData.story,
         date: formData.date,
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-        mediaUrl,
+        media_url: mediaUrl,
         type: mediaFile ? mediaFile.type.split('/')[0] : '',
-        createdAt: serverTimestamp(),
-        isPrivate: formData.isPrivate,
+        created_at: new Date().toISOString(),
+        is_private: formData.isPrivate,
       };
 
-      await addDoc(collection(db, 'memories'), memoryData);
+      // await supabase.from('memories').insert(memoryData);
+      console.log('Memory data prepared:', memoryData);
       router.push('/memories');
     } catch (error) {
       console.error('Error adding memory:', error);

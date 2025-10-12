@@ -2,16 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  addDoc,
-  deleteDoc,
-  query,
-  where,
-  onSnapshot,
-  getDocs,
-} from 'firebase/firestore';
+// TODO: Replace with Supabase imports
+// import { supabase } from '@/lib/supabase';
 
 const REACTIONS = {
   '❤️': 'heart',
@@ -30,28 +22,22 @@ export default function ReactionSection({ memoryId }) {
   useEffect(() => {
     if (!memoryId) return;
 
-    // Listen to reactions in real-time
-    const reactionsRef = collection(db, 'reactions');
-    const q = query(reactionsRef, where('memoryId', '==', memoryId));
+    // TODO: Replace with Supabase real-time subscription
+    // const subscription = supabase
+    //   .channel('reactions')
+    //   .on('postgres_changes', 
+    //     { event: '*', schema: 'public', table: 'reactions', filter: `memory_id=eq.${memoryId}` },
+    //     (payload) => {
+    //       // Handle real-time updates
+    //     }
+    //   )
+    //   .subscribe();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reactionCounts = {};
-      const userReacts = {};
+    // For now, set empty state
+    setReactions({});
+    setUserReactions({});
 
-      snapshot.docs.forEach((doc) => {
-        const reaction = doc.data();
-        reactionCounts[reaction.type] = (reactionCounts[reaction.type] || 0) + 1;
-        
-        if (reaction.userId === user?.uid) {
-          userReacts[reaction.type] = doc.id;
-        }
-      });
-
-      setReactions(reactionCounts);
-      setUserReactions(userReacts);
-    });
-
-    return () => unsubscribe();
+    // return () => subscription.unsubscribe();
   }, [memoryId, user]);
 
   const handleReaction = async (emoji) => {
@@ -61,19 +47,22 @@ export default function ReactionSection({ memoryId }) {
       const reactionType = REACTIONS[emoji];
       const existingReactionId = userReactions[reactionType];
 
+      // TODO: Replace with Supabase operations
       if (existingReactionId) {
         // Remove reaction
-        await deleteDoc(collection(db, 'reactions', existingReactionId));
+        // await supabase.from('reactions').delete().eq('id', existingReactionId);
+        console.log('Remove reaction:', existingReactionId);
       } else {
         // Add reaction
-        await addDoc(collection(db, 'reactions'), {
-          memoryId,
-          userId: user.uid,
-          userName: user.displayName,
-          type: reactionType,
-          emoji,
-          createdAt: new Date(),
-        });
+        // await supabase.from('reactions').insert({
+        //   memory_id: memoryId,
+        //   user_id: user.uid,
+        //   user_name: user.displayName,
+        //   type: reactionType,
+        //   emoji,
+        //   created_at: new Date().toISOString(),
+        // });
+        console.log('Add reaction:', { memoryId, reactionType, emoji });
       }
     } catch (error) {
       console.error('Error toggling reaction:', error);

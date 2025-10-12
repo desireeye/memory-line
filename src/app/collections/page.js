@@ -2,20 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+// TODO: Replace with Supabase imports
+// import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -41,29 +29,26 @@ export default function Collections() {
     if (!user) return;
 
     try {
-      const collectionsRef = collection(db, 'collections');
-      const q = query(
-        collectionsRef,
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
+      // TODO: Replace with Supabase query
+      // const { data: collections, error } = await supabase
+      //   .from('collections')
+      //   .select('*')
+      //   .eq('user_id', user.uid)
+      //   .order('created_at', { ascending: false });
+      // if (error) throw error;
       
-      const snapshot = await getDocs(q);
-      const collectionsData = await Promise.all(snapshot.docs.map(async doc => {
-        const data = { id: doc.id, ...doc.data() };
-        
-        // Get memory count for each collection
-        const memoryQuery = query(
-          collection(db, 'collection_memories'),
-          where('collectionId', '==', doc.id)
-        );
-        const memorySnapshot = await getDocs(memoryQuery);
-        data.memoryCount = memorySnapshot.size;
-        
-        return data;
-      }));
+      // const collectionsData = await Promise.all(collections.map(async collection => {
+      //   const { count } = await supabase
+      //     .from('collection_memories')
+      //     .select('*', { count: 'exact', head: true })
+      //     .eq('collection_id', collection.id);
+      //   return { ...collection, memoryCount: count || 0 };
+      // }));
       
-      setCollections(collectionsData);
+      // setCollections(collectionsData);
+      
+      // For now, set empty array
+      setCollections([]);
     } catch (error) {
       console.error('Error fetching collections:', error);
     } finally {
@@ -78,20 +63,26 @@ export default function Collections() {
     try {
       let coverUrl = '';
       if (coverImage) {
-        const storageRef = ref(storage, `collections/${user.uid}/${Date.now()}_${coverImage.name}`);
-        await uploadBytes(storageRef, coverImage);
-        coverUrl = await getDownloadURL(storageRef);
+        // TODO: Replace with Supabase Storage
+        // const fileName = `${Date.now()}_${coverImage.name}`;
+        // const { data, error } = await supabase.storage
+        //   .from('collections')
+        //   .upload(`${user.uid}/${fileName}`, coverImage);
+        // if (error) throw error;
+        // coverUrl = data.path;
+        console.log('Cover image upload not implemented yet');
       }
 
-      await addDoc(collection(db, 'collections'), {
-        userId: user.uid,
-        name: newCollection.name,
-        description: newCollection.description,
-        coverImage: coverUrl,
-        isPrivate: newCollection.isPrivate,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      // TODO: Replace with Supabase insert
+      // await supabase.from('collections').insert({
+      //   user_id: user.uid,
+      //   name: newCollection.name,
+      //   description: newCollection.description,
+      //   cover_image: coverUrl,
+      //   is_private: newCollection.isPrivate,
+      //   created_at: new Date().toISOString(),
+      //   updated_at: new Date().toISOString(),
+      // });
 
       setNewCollection({ name: '', description: '', isPrivate: false });
       setCoverImage(null);
