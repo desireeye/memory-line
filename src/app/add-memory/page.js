@@ -3,9 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '@/lib/supabaseClient';
 import Image from 'next/image';
 import { compressImage } from '@/utils/imageCompression';
 import UploadStatus from '@/components/UploadStatus';
@@ -73,29 +71,24 @@ export default function AddMemory() {
           console.log('File prepared for upload:', {
             name: mediaFile.name,
             type: mediaFile.type,
-            size: fileToUpload.size
+            size: fileToUpload.size,
           });
 
-          // Upload media to Firebase Storage
+          // Upload media to Supabase Storage
           const fileName = `${Date.now()}_${mediaFile.name}`;
-          const storagePath = `memories/${user.uid}/${fileName}`;
-          console.log('Uploading to path:', storagePath);
-          
-          const storageRef = ref(storage, storagePath);
-          
-          // Create upload task
-          const uploadTask = uploadBytes(storageRef, fileToUpload);
-          
-          // Handle upload state
-          uploadTask.then((snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log('Upload progress:', progress.toFixed(2) + '%');
-          });
-          
-          const uploadResult = await uploadTask;
-          console.log('Upload completed:', uploadResult);
-          
-          mediaUrl = await getDownloadURL(storageRef);
+          const storagePath = `${user.uid}/${fileName}`;
+          console.log('Uploading to Supabase path:', storagePath);
+
+          setUploadStatus({ show: true, message: 'Uploading to Supabase Storage...', progress: 10 });
+
+          const { error: uploadError } = await supabase.storage
+            .from('memories')
+            .upload(storagePath, fileToUpload, { contentType: mediaFile.type, upsert: false });
+
+          if (uploadError) throw uploadError;
+
+          const { data: publicUrlData } = supabase.storage.from('memories').getPublicUrl(storagePath);
+          mediaUrl = publicUrlData?.publicUrl || '';
           console.log('File URL obtained:', mediaUrl);
         } catch (uploadError) {
           console.error('Error during file upload:', uploadError);
@@ -103,7 +96,7 @@ export default function AddMemory() {
         }
       }
 
-      // Add memory to Firestore
+      // Add memory to Supabase
       const memoryData = {
         userId: user.uid,
         title: formData.title,
@@ -112,18 +105,30 @@ export default function AddMemory() {
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
         mediaUrl,
         type: mediaFile ? mediaFile.type.split('/')[0] : '',
-        createdAt: serverTimestamp(),
         isPrivate: formData.isPrivate,
       };
 
-      await addDoc(collection(db, 'memories'), memoryData);
+      const { error: insertError } = await supabase.from('memories').insert([
+        {
+          user_id: memoryData.userId,
+          title: memoryData.title,
+          story: memoryData.story,
+          date: memoryData.date,
+          tags: memoryData.tags,
+          media_url: memoryData.mediaUrl,
+          type: memoryData.type,
+          is_private: memoryData.isPrivate,
+        },
+      ]);
+
+      if (insertError) throw insertError;
       router.push('/memories');
     } catch (error) {
       console.error('Error adding memory:', error);
       let errorMessage = 'Failed to add memory. ';
       if (error.message.includes('File upload failed')) {
         errorMessage += 'There was a problem uploading your file. Please try again.';
-      } else if (error.code?.includes('storage/')) {
+      } else if (error.code?.includes('storage') || error.message?.includes('Storage')) {
         errorMessage += 'Storage error: ' + error.message;
       } else if (error.code?.includes('permission-denied')) {
         errorMessage += 'You don\'t have permission to upload files.';

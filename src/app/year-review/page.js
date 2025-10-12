@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { supabase } from '@/lib/supabaseClient';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { format, getYear, parseISO } from 'date-fns';
@@ -20,14 +19,15 @@ export default function YearInReview() {
       if (!user) return;
 
       try {
-        const memoriesRef = collection(db, 'memories');
-        const q = query(memoriesRef, where('userId', '==', user.uid));
-        const snapshot = await getDocs(q);
-        
+        const { data, error } = await supabase
+          .from('memories')
+          .select('date')
+          .eq('user_id', user.uid);
+        if (error) throw error;
+
         const years = new Set();
-        snapshot.docs.forEach(doc => {
-          const memory = doc.data();
-          const year = getYear(parseISO(memory.date));
+        (data || []).forEach(row => {
+          const year = getYear(parseISO(row.date));
           years.add(year);
         });
 
@@ -49,21 +49,25 @@ export default function YearInReview() {
       
       setLoading(true);
       try {
-        const memoriesRef = collection(db, 'memories');
         const startDate = `${selectedYear}-01-01`;
         const endDate = `${selectedYear}-12-31`;
-        
-        const q = query(
-          memoriesRef,
-          where('userId', '==', user.uid),
-          where('date', '>=', startDate),
-          where('date', '<=', endDate)
-        );
-        
-        const snapshot = await getDocs(q);
-        const memories = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+
+        const { data, error } = await supabase
+          .from('memories')
+          .select('*')
+          .eq('user_id', user.uid)
+          .gte('date', startDate)
+          .lte('date', endDate);
+        if (error) throw error;
+        const memories = (data || []).map(row => ({
+          id: row.id,
+          title: row.title,
+          story: row.story,
+          date: row.date,
+          tags: row.tags || [],
+          mediaUrl: row.media_url || '',
+          type: row.type || '',
+          isPrivate: row.is_private || false,
         }));
 
         // Calculate statistics
@@ -78,9 +82,8 @@ export default function YearInReview() {
         };
 
         // Collect reactions for all memories
-        const reactionsRef = collection(db, 'reactions');
         const reactionCounts = {};
-        
+
         for (const memory of memories) {
           // Count by month
           const month = parseISO(memory.date).getMonth();
@@ -96,9 +99,12 @@ export default function YearInReview() {
           });
 
           // Get reaction count
-          const reactionQuery = query(reactionsRef, where('memoryId', '==', memory.id));
-          const reactionSnapshot = await getDocs(reactionQuery);
-          reactionCounts[memory.id] = reactionSnapshot.size;
+          const { count, error: rErr } = await supabase
+            .from('reactions')
+            .select('*', { count: 'exact', head: true })
+            .eq('memory_id', memory.id);
+          if (rErr) throw rErr;
+          reactionCounts[memory.id] = count || 0;
         }
 
         // Find most reacted memory

@@ -1,14 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import {
-  auth,
-  signInWithGoogle,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  logout,
-  onAuthStateChanged,
-} from '../lib/firebase';
+import { supabase } from '@/lib/supabaseClient';
 
 const AuthContext = createContext({});
 
@@ -17,27 +10,31 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUser({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-        });
-      } else {
-        setUser(null);
-      }
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const supaUser = session?.user || null;
+      setUser(supaUser ? mapSupabaseUser(supaUser) : null);
+      setLoading(false);
+    };
+
+    initializeAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const supaUser = session?.user || null;
+      setUser(supaUser ? mapSupabaseUser(supaUser) : null);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email, password) => {
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      return { success: true, user: result.user };
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      return { success: true, user: data.user ? mapSupabaseUser(data.user) : null };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -45,8 +42,9 @@ export function AuthProvider({ children }) {
 
   const signIn = async (email, password) => {
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return { success: true, user: result.user };
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return { success: true, user: data.user ? mapSupabaseUser(data.user) : null };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -54,8 +52,10 @@ export function AuthProvider({ children }) {
 
   const signInWithGooglePopup = async () => {
     try {
-      const result = await signInWithGoogle();
-      return { success: true, user: result.user };
+      const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+      if (error) throw error;
+      // On web, this redirects; we won't have user immediately.
+      return { success: true, user: null };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -63,12 +63,23 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     try {
-      await logout();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
   };
+
+  function mapSupabaseUser(supaUser) {
+    const metadata = supaUser.user_metadata || {};
+    return {
+      uid: supaUser.id,
+      email: supaUser.email,
+      displayName: metadata.full_name || metadata.name || '',
+      photoURL: metadata.avatar_url || '',
+    };
+  }
 
   return (
     <AuthContext.Provider

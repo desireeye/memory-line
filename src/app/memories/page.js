@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { supabase } from '@/lib/supabaseClient';
 import { motion } from 'framer-motion';
 import MemoryCard from '@/components/MemoryCard';
 
@@ -17,19 +16,23 @@ export default function MemoriesPage() {
       if (!user) return;
 
       try {
-        const memoriesRef = collection(db, 'memories');
-        // For personal memories, show all memories (both private and public)
-        const q = query(
-          memoriesRef,
-          where('userId', '==', user.uid),
-          orderBy('date', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        
-        const memoriesData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          date: doc.data().date // Ensure date is properly handled
+        const { data, error } = await supabase
+          .from('memories')
+          .select('*')
+          .eq('user_id', user.uid)
+          .order('date', { ascending: false });
+
+        if (error) throw error;
+
+        const memoriesData = (data || []).map((row) => ({
+          id: row.id,
+          title: row.title,
+          story: row.story,
+          date: row.date,
+          tags: row.tags || [],
+          mediaUrl: row.media_url || '',
+          type: row.type || '',
+          isPrivate: row.is_private || false,
         }));
 
         setMemories(memoriesData);
