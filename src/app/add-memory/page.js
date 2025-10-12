@@ -53,8 +53,13 @@ export default function AddMemory() {
       return;
     }
 
+    if (isLoading || isProcessing) {
+      return; // Prevent multiple submissions
+    }
+
     setIsLoading(true);
     setIsProcessing(true);
+    setUploadStatus({ show: true, message: 'Starting upload process...', progress: 0 });
     try {
       let mediaUrl = '';
       if (mediaFile) {
@@ -129,6 +134,9 @@ export default function AddMemory() {
     } finally {
       setIsLoading(false);
       setIsProcessing(false);
+      setTimeout(() => {
+        setUploadStatus({ show: false, message: '', progress: 0 });
+      }, 3000);
     }
   };
 
