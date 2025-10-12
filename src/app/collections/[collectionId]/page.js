@@ -2,18 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  getDoc,
-  doc,
-  addDoc,
-  deleteDoc,
-} from 'firebase/firestore';
+// TODO: Replace with Supabase imports
+// import { supabase } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import MemoryCard from '@/components/MemoryCard';
@@ -36,35 +26,35 @@ export default function CollectionPage({ params }) {
     if (!user || !collectionId) return;
 
     try {
-      // Get collection details
-      const collectionRef = doc(db, 'collections', collectionId);
-      const collectionSnap = await getDoc(collectionRef);
+      // TODO: Replace with Supabase queries
+      // const { data: collection, error: collectionError } = await supabase
+      //   .from('collections')
+      //   .select('*')
+      //   .eq('id', collectionId)
+      //   .single();
+      // if (collectionError) throw collectionError;
       
-      if (!collectionSnap.exists()) {
-        setLoading(false);
-        return;
-      }
+      // setCollection(collection);
 
-      setCollection({ id: collectionSnap.id, ...collectionSnap.data() });
+      // const { data: collectionMemories, error: memoriesError } = await supabase
+      //   .from('collection_memories')
+      //   .select('memory_id')
+      //   .eq('collection_id', collectionId);
+      // if (memoriesError) throw memoriesError;
 
-      // Get memories in this collection
-      const memoryQuery = query(
-        collection(db, 'collection_memories'),
-        where('collectionId', '==', collectionId)
-      );
-      const memorySnapshot = await getDocs(memoryQuery);
-      const memoryIds = memorySnapshot.docs.map(doc => doc.data().memoryId);
+      // const memoryIds = collectionMemories.map(cm => cm.memory_id);
+      // const { data: memories, error: memoriesDataError } = await supabase
+      //   .from('memories')
+      //   .select('*')
+      //   .in('id', memoryIds)
+      //   .order('date', { ascending: false });
+      // if (memoriesDataError) throw memoriesDataError;
 
-      // Fetch actual memory data
-      const memoriesData = [];
-      for (const memoryId of memoryIds) {
-        const memoryDoc = await getDoc(doc(db, 'memories', memoryId));
-        if (memoryDoc.exists()) {
-          memoriesData.push({ id: memoryDoc.id, ...memoryDoc.data() });
-        }
-      }
-
-      setMemories(memoriesData.sort((a, b) => b.date.localeCompare(a.date)));
+      // setMemories(memories || []);
+      
+      // For now, set empty state
+      setCollection(null);
+      setMemories([]);
     } catch (error) {
       console.error('Error fetching collection:', error);
     } finally {
@@ -76,22 +66,22 @@ export default function CollectionPage({ params }) {
     if (!user) return;
 
     try {
-      // Get all user's memories
-      const memoriesRef = collection(db, 'memories');
-      const q = query(
-        memoriesRef,
-        where('userId', '==', user.uid),
-        orderBy('date', 'desc')
-      );
-      const snapshot = await getDocs(q);
+      // TODO: Replace with Supabase query
+      // const { data: memories, error } = await supabase
+      //   .from('memories')
+      //   .select('*')
+      //   .eq('user_id', user.uid)
+      //   .order('date', { ascending: false });
+      // if (error) throw error;
       
-      // Filter out memories already in collection
-      const currentMemoryIds = memories.map(m => m.id);
-      const availableMems = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(mem => !currentMemoryIds.includes(mem.id));
+      // // Filter out memories already in collection
+      // const currentMemoryIds = memories.map(m => m.id);
+      // const availableMems = memories.filter(mem => !currentMemoryIds.includes(mem.id));
       
-      setAvailableMemories(availableMems);
+      // setAvailableMemories(availableMems);
+      
+      // For now, set empty array
+      setAvailableMemories([]);
     } catch (error) {
       console.error('Error fetching available memories:', error);
     }
@@ -101,13 +91,13 @@ export default function CollectionPage({ params }) {
     if (!user || !collectionId || selectedMemories.length === 0) return;
 
     try {
-      for (const memoryId of selectedMemories) {
-        await addDoc(collection(db, 'collection_memories'), {
-          collectionId,
-          memoryId,
-          addedAt: new Date().toISOString(),
-        });
-      }
+      // TODO: Replace with Supabase insert
+      // const memoriesToAdd = selectedMemories.map(memoryId => ({
+      //   collection_id: collectionId,
+      //   memory_id: memoryId,
+      //   added_at: new Date().toISOString(),
+      // }));
+      // await supabase.from('collection_memories').insert(memoriesToAdd);
 
       setShowAddMemory(false);
       setSelectedMemories([]);
@@ -121,16 +111,12 @@ export default function CollectionPage({ params }) {
     if (!user || !collectionId) return;
 
     try {
-      const q = query(
-        collection(db, 'collection_memories'),
-        where('collectionId', '==', collectionId),
-        where('memoryId', '==', memoryId)
-      );
-      const snapshot = await getDocs(q);
-      
-      for (const doc of snapshot.docs) {
-        await deleteDoc(doc.ref);
-      }
+      // TODO: Replace with Supabase delete
+      // await supabase
+      //   .from('collection_memories')
+      //   .delete()
+      //   .eq('collection_id', collectionId)
+      //   .eq('memory_id', memoryId);
 
       fetchCollectionData();
     } catch (error) {

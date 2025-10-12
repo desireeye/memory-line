@@ -1,14 +1,8 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import {
-  auth,
-  signInWithGoogle,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  logout,
-  onAuthStateChanged,
-} from '../lib/firebase';
+// TODO: Replace with Supabase auth imports
+// import { supabase } from '@/lib/supabase';
 
 const AuthContext = createContext({});
 
@@ -17,27 +11,41 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUser({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-        });
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
+    // TODO: Replace with Supabase auth state listener
+    // const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    //   (event, session) => {
+    //     if (session?.user) {
+    //       setUser({
+    //         uid: session.user.id,
+    //         email: session.user.email,
+    //         displayName: session.user.user_metadata?.full_name,
+    //         photoURL: session.user.user_metadata?.avatar_url,
+    //       });
+    //     } else {
+    //       setUser(null);
+    //     }
+    //     setLoading(false);
+    //   }
+    // );
 
-    return () => unsubscribe();
+    // For now, set no user and stop loading
+    setUser(null);
+    setLoading(false);
+
+    // return () => subscription.unsubscribe();
   }, []);
 
   const signUp = async (email, password) => {
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      return { success: true, user: result.user };
+      // TODO: Replace with Supabase auth
+      // const { data, error } = await supabase.auth.signUp({
+      //   email,
+      //   password,
+      // });
+      // if (error) throw error;
+      // return { success: true, user: data.user };
+      console.log('Sign up:', { email, password });
+      return { success: false, error: 'Authentication not implemented yet' };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -45,8 +53,15 @@ export function AuthProvider({ children }) {
 
   const signIn = async (email, password) => {
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return { success: true, user: result.user };
+      // TODO: Replace with Supabase auth
+      // const { data, error } = await supabase.auth.signInWithPassword({
+      //   email,
+      //   password,
+      // });
+      // if (error) throw error;
+      // return { success: true, user: data.user };
+      console.log('Sign in:', { email, password });
+      return { success: false, error: 'Authentication not implemented yet' };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -54,8 +69,14 @@ export function AuthProvider({ children }) {
 
   const signInWithGooglePopup = async () => {
     try {
-      const result = await signInWithGoogle();
-      return { success: true, user: result.user };
+      // TODO: Replace with Supabase auth
+      // const { data, error } = await supabase.auth.signInWithOAuth({
+      //   provider: 'google',
+      // });
+      // if (error) throw error;
+      // return { success: true, user: data.user };
+      console.log('Sign in with Google');
+      return { success: false, error: 'Authentication not implemented yet' };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -63,8 +84,12 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     try {
-      await logout();
-      return { success: true };
+      // TODO: Replace with Supabase auth
+      // const { error } = await supabase.auth.signOut();
+      // if (error) throw error;
+      // return { success: true };
+      console.log('Sign out');
+      return { success: false, error: 'Authentication not implemented yet' };
     } catch (error) {
       return { success: false, error: error.message };
     }

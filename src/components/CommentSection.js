@@ -2,16 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-} from 'firebase/firestore';
+// TODO: Replace with Supabase imports
+// import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 
 export default function CommentSection({ memoryId }) {
@@ -23,24 +15,21 @@ export default function CommentSection({ memoryId }) {
   useEffect(() => {
     if (!memoryId) return;
 
-    // Subscribe to comments in real-time
-    const commentsRef = collection(db, 'comments');
-    const q = query(
-      commentsRef,
-      where('memoryId', '==', memoryId),
-      orderBy('createdAt', 'desc')
-    );
+    // TODO: Replace with Supabase real-time subscription
+    // const subscription = supabase
+    //   .channel('comments')
+    //   .on('postgres_changes', 
+    //     { event: '*', schema: 'public', table: 'comments', filter: `memory_id=eq.${memoryId}` },
+    //     (payload) => {
+    //       // Handle real-time updates
+    //     }
+    //   )
+    //   .subscribe();
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const commentsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-      }));
-      setComments(commentsData);
-    });
+    // For now, set empty state
+    setComments([]);
 
-    return () => unsubscribe();
+    // return () => subscription.unsubscribe();
   }, [memoryId]);
 
   const handleSubmit = async (e) => {
@@ -49,14 +38,16 @@ export default function CommentSection({ memoryId }) {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'comments'), {
-        memoryId,
-        userId: user.uid,
-        userPhoto: user.photoURL,
-        userName: user.displayName,
-        text: newComment.trim(),
-        createdAt: serverTimestamp(),
-      });
+      // TODO: Replace with Supabase operation
+      // await supabase.from('comments').insert({
+      //   memory_id: memoryId,
+      //   user_id: user.uid,
+      //   user_photo: user.photoURL,
+      //   user_name: user.displayName,
+      //   text: newComment.trim(),
+      //   created_at: new Date().toISOString(),
+      // });
+      console.log('Add comment:', { memoryId, text: newComment.trim() });
       setNewComment('');
     } catch (error) {
       console.error('Error adding comment:', error);
