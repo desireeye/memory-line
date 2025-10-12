@@ -4,10 +4,11 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import Image from 'next/image';
 import { compressImage } from '@/utils/imageCompression';
+import UploadStatus from '@/components/UploadStatus';
 
 export default function AddMemory() {
   const { user } = useAuth();
@@ -23,6 +24,7 @@ export default function AddMemory() {
   const [mediaFile, setMediaFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState({ show: false, message: '', progress: 0 });
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -145,6 +147,9 @@ export default function AddMemory() {
             onChange={handleFileChange}
             className="w-full border border-gray-300 rounded-md p-2"
           />
+          {uploadStatus.show && (
+            <UploadStatus message={uploadStatus.message} progress={uploadStatus.progress} />
+          )}
           {previewUrl && (
             <div className="mt-2 relative h-48 w-full">
               {isProcessing && (
