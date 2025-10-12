@@ -56,15 +56,44 @@ export default function AddMemory() {
     try {
       let mediaUrl = '';
       if (mediaFile) {
-        // Compress image if it's an image file
-        const fileToUpload = mediaFile.type.startsWith('image/')
-          ? await compressImage(mediaFile)
-          : mediaFile;
+        try {
+          console.log('Starting file upload process...');
+          // Compress image if it's an image file
+          const fileToUpload = mediaFile.type.startsWith('image/')
+            ? await compressImage(mediaFile)
+            : mediaFile;
+          
+          console.log('File prepared for upload:', {
+            name: mediaFile.name,
+            type: mediaFile.type,
+            size: fileToUpload.size
+          });
 
-        // Upload media to Firebase Storage
-        const storageRef = ref(storage, `memories/${user.uid}/${Date.now()}_${mediaFile.name}`);
-        await uploadBytes(storageRef, fileToUpload);
-        mediaUrl = await getDownloadURL(storageRef);
+          // Upload media to Firebase Storage
+          const fileName = `${Date.now()}_${mediaFile.name}`;
+          const storagePath = `memories/${user.uid}/${fileName}`;
+          console.log('Uploading to path:', storagePath);
+          
+          const storageRef = ref(storage, storagePath);
+          
+          // Create upload task
+          const uploadTask = uploadBytes(storageRef, fileToUpload);
+          
+          // Handle upload state
+          uploadTask.then((snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log('Upload progress:', progress.toFixed(2) + '%');
+          });
+          
+          const uploadResult = await uploadTask;
+          console.log('Upload completed:', uploadResult);
+          
+          mediaUrl = await getDownloadURL(storageRef);
+          console.log('File URL obtained:', mediaUrl);
+        } catch (uploadError) {
+          console.error('Error during file upload:', uploadError);
+          throw new Error(`File upload failed: ${uploadError.message}`);
+        }
       }
 
       // Add memory to Firestore
@@ -84,7 +113,17 @@ export default function AddMemory() {
       router.push('/memories');
     } catch (error) {
       console.error('Error adding memory:', error);
-      alert('Failed to add memory. Please try again.');
+      let errorMessage = 'Failed to add memory. ';
+      if (error.message.includes('File upload failed')) {
+        errorMessage += 'There was a problem uploading your file. Please try again.';
+      } else if (error.code?.includes('storage/')) {
+        errorMessage += 'Storage error: ' + error.message;
+      } else if (error.code?.includes('permission-denied')) {
+        errorMessage += 'You don\'t have permission to upload files.';
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      alert(errorMessage);
     } finally {
       setIsLoading(false);
       setIsProcessing(false);

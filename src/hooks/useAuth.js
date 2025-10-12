@@ -8,7 +8,7 @@ import {
   signInWithEmailAndPassword,
   logout,
   onAuthStateChanged,
-} from '../../firebase';
+} from '../lib/firebase';
 
 const AuthContext = createContext({});
 
