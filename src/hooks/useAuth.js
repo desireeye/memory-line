@@ -1,14 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import {
-  auth,
-  signInWithGoogle,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  logout,
-  onAuthStateChanged,
-} from '../lib/firebase';
+import { supabase } from '@/lib/supabaseClient';
 
 const AuthContext = createContext({});
 
@@ -17,27 +10,42 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUser({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-        });
-      } else {
-        setUser(null);
-      }
+    const mapUser = (u) =>
+      u
+        ? {
+            uid: u.id,
+            email: u.email,
+            displayName:
+              u.user_metadata?.name ||
+              u.user_metadata?.full_name ||
+              u.user_metadata?.user_name ||
+              '',
+            photoURL: u.user_metadata?.avatar_url || '',
+          }
+        : null;
+
+    const init = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(mapUser(data?.user ?? null));
       setLoading(false);
+    };
+
+    init();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(mapUser(session?.user ?? null));
     });
 
-    return () => unsubscribe();
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email, password) => {
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      return { success: true, user: result.user };
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      return { success: true, user: data.user };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -45,8 +53,9 @@ export function AuthProvider({ children }) {
 
   const signIn = async (email, password) => {
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return { success: true, user: result.user };
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return { success: true, user: data.user };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -54,8 +63,13 @@ export function AuthProvider({ children }) {
 
   const signInWithGooglePopup = async () => {
     try {
-      const result = await signInWithGoogle();
-      return { success: true, user: result.user };
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: typeof window !== 'undefined' ? window.location.origin + '/memories' : undefined },
+      });
+      if (error) throw error;
+      // This will redirect; return success to satisfy caller
+      return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -63,7 +77,8 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     try {
-      await logout();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };

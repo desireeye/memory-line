@@ -2,20 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { supabase } from '@/lib/supabaseClient';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -41,28 +28,21 @@ export default function Collections() {
     if (!user) return;
 
     try {
-      const collectionsRef = collection(db, 'collections');
-      const q = query(
-        collectionsRef,
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const snapshot = await getDocs(q);
-      const collectionsData = await Promise.all(snapshot.docs.map(async doc => {
-        const data = { id: doc.id, ...doc.data() };
-        
-        // Get memory count for each collection
-        const memoryQuery = query(
-          collection(db, 'collection_memories'),
-          where('collectionId', '==', doc.id)
-        );
-        const memorySnapshot = await getDocs(memoryQuery);
-        data.memoryCount = memorySnapshot.size;
-        
-        return data;
+      const { data, error } = await supabase
+        .from('collections')
+        .select('*, collection_memories(count)')
+        .eq('userId', user.uid)
+        .order('createdAt', { ascending: false });
+      if (error) throw error;
+      const collectionsData = (data || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        coverImage: c.coverImage,
+        isPrivate: c.isPrivate,
+        createdAt: c.createdAt,
+        memoryCount: c.collection_memories?.[0]?.count ?? 0,
       }));
-      
       setCollections(collectionsData);
     } catch (error) {
       console.error('Error fetching collections:', error);
@@ -78,20 +58,27 @@ export default function Collections() {
     try {
       let coverUrl = '';
       if (coverImage) {
-        const storageRef = ref(storage, `collections/${user.uid}/${Date.now()}_${coverImage.name}`);
-        await uploadBytes(storageRef, coverImage);
-        coverUrl = await getDownloadURL(storageRef);
+        const path = `collections/${user.uid}/${Date.now()}_${coverImage.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('collections')
+          .upload(path, coverImage, { contentType: coverImage.type, upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('collections').getPublicUrl(path);
+        coverUrl = urlData.publicUrl;
       }
 
-      await addDoc(collection(db, 'collections'), {
-        userId: user.uid,
-        name: newCollection.name,
-        description: newCollection.description,
-        coverImage: coverUrl,
-        isPrivate: newCollection.isPrivate,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      const { error: insertErr } = await supabase.from('collections').insert([
+        {
+          userId: user.uid,
+          name: newCollection.name,
+          description: newCollection.description,
+          coverImage: coverUrl,
+          isPrivate: newCollection.isPrivate,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ]);
+      if (insertErr) throw insertErr;
 
       setNewCollection({ name: '', description: '', isPrivate: false });
       setCoverImage(null);
