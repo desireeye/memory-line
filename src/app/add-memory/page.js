@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { db, storage } from '@/lib/firebase';
@@ -25,11 +25,29 @@ export default function AddMemory() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState({ show: false, message: '', progress: 0 });
+  const [uploadError, setUploadError] = useState(null);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Please select a valid image or video file (JPEG, PNG, GIF, WebP, MP4, WebM, QuickTime)');
+        e.target.value = '';
+        return;
+      }
+
+      // Validate file size (50MB limit)
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      if (file.size > maxSize) {
+        alert('File size must be less than 50MB');
+        e.target.value = '';
+        return;
+      }
+
       setMediaFile(file);
+      setUploadError(null); // Clear any previous errors
       // Create preview URL for images
       if (file.type.startsWith('image/')) {
         const url = URL.createObjectURL(file);
@@ -46,6 +64,24 @@ export default function AddMemory() {
     }));
   };
 
+  const retryUpload = () => {
+    setUploadError(null);
+    setUploadStatus({ show: false, message: '', progress: 0 });
+    // Trigger form submission again
+    if (mediaFile && formData.title && formData.date) {
+      handleSubmit({ preventDefault: () => {} });
+    }
+  };
+
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) {
@@ -57,9 +93,34 @@ export default function AddMemory() {
       return; // Prevent multiple submissions
     }
 
+    // Validate required fields
+    if (!formData.title.trim()) {
+      alert('Please enter a title for your memory');
+      return;
+    }
+
+    if (!formData.date) {
+      alert('Please select a date for your memory');
+      return;
+    }
+
+    if (!mediaFile) {
+      alert('Please select a photo or video to upload');
+      return;
+    }
+
     setIsLoading(true);
     setIsProcessing(true);
+    setUploadError(null); // Clear any previous errors
     setUploadStatus({ show: true, message: 'Starting upload process...', progress: 0 });
+    
+    console.log('Starting upload process with file:', {
+      name: mediaFile.name,
+      type: mediaFile.type,
+      size: mediaFile.size,
+      userId: user.uid
+    });
+    
     try {
       let mediaUrl = '';
       if (mediaFile) {
@@ -83,17 +144,36 @@ export default function AddMemory() {
           
           const storageRef = ref(storage, storagePath);
           
-          // Create upload task
-          const uploadTask = uploadBytes(storageRef, fileToUpload);
+          // Create upload task with resumable upload for better progress tracking
+          const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
           
-          // Handle upload state
-          uploadTask.then((snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log('Upload progress:', progress.toFixed(2) + '%');
+          // Handle upload state with progress tracking
+          await new Promise((resolve, reject) => {
+            uploadTask.on('state_changed', 
+              (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                console.log('Upload progress:', progress.toFixed(2) + '%');
+                setUploadStatus({ 
+                  show: true, 
+                  message: `Uploading... ${progress.toFixed(1)}%`, 
+                  progress: progress 
+                });
+              },
+              (error) => {
+                console.error('Upload error:', error);
+                reject(error);
+              },
+              async () => {
+                console.log('Upload completed successfully');
+                setUploadStatus({ 
+                  show: true, 
+                  message: 'Upload completed! Processing...', 
+                  progress: 100 
+                });
+                resolve();
+              }
+            );
           });
-          
-          const uploadResult = await uploadTask;
-          console.log('Upload completed:', uploadResult);
           
           mediaUrl = await getDownloadURL(storageRef);
           console.log('File URL obtained:', mediaUrl);
@@ -121,22 +201,42 @@ export default function AddMemory() {
     } catch (error) {
       console.error('Error adding memory:', error);
       let errorMessage = 'Failed to add memory. ';
+      
       if (error.message.includes('File upload failed')) {
         errorMessage += 'There was a problem uploading your file. Please try again.';
       } else if (error.code?.includes('storage/')) {
-        errorMessage += 'Storage error: ' + error.message;
+        if (error.code === 'storage/unauthorized') {
+          errorMessage += 'You don\'t have permission to upload files. Please check your authentication.';
+        } else if (error.code === 'storage/canceled') {
+          errorMessage += 'Upload was canceled. Please try again.';
+        } else if (error.code === 'storage/unknown') {
+          errorMessage += 'An unknown error occurred during upload. Please try again.';
+        } else if (error.code === 'storage/invalid-format') {
+          errorMessage += 'Invalid file format. Please select a valid image or video file.';
+        } else if (error.code === 'storage/invalid-checksum') {
+          errorMessage += 'File upload was corrupted. Please try again.';
+        } else {
+          errorMessage += 'Storage error: ' + error.message;
+        }
       } else if (error.code?.includes('permission-denied')) {
         errorMessage += 'You don\'t have permission to upload files.';
+      } else if (error.message.includes('quota')) {
+        errorMessage += 'Storage quota exceeded. Please contact support.';
+      } else if (error.message.includes('network')) {
+        errorMessage += 'Network error. Please check your connection and try again.';
       } else {
-        errorMessage += 'Please try again.';
+        errorMessage += 'Please try again. If the problem persists, contact support.';
       }
-      alert(errorMessage);
+      
+      setUploadError(errorMessage);
+      setUploadStatus({ 
+        show: true, 
+        message: errorMessage, 
+        progress: 0 
+      });
     } finally {
       setIsLoading(false);
       setIsProcessing(false);
-      setTimeout(() => {
-        setUploadStatus({ show: false, message: '', progress: 0 });
-      }, 3000);
     }
   };
 
@@ -156,7 +256,11 @@ export default function AddMemory() {
             className="w-full border border-gray-300 rounded-md p-2"
           />
           {uploadStatus.show && (
-            <UploadStatus message={uploadStatus.message} progress={uploadStatus.progress} />
+            <UploadStatus 
+              message={uploadStatus.message} 
+              progress={uploadStatus.progress} 
+              isError={uploadStatus.message.includes('error') || uploadStatus.message.includes('Error') || uploadStatus.message.includes('failed')}
+            />
           )}
           {previewUrl && (
             <div className="mt-2 relative h-48 w-full">
@@ -251,13 +355,29 @@ export default function AddMemory() {
           </label>
         </div>
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className={`w-full btn-primary ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          {isLoading ? 'Uploading...' : 'Save Memory'}
-        </button>
+        <div className="space-y-2">
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`w-full btn-primary ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {isLoading ? 'Uploading...' : 'Save Memory'}
+          </button>
+          
+          {uploadError && (
+            <div className="text-center">
+              <p className="text-red-600 text-sm mb-2">{uploadError}</p>
+              <button
+                type="button"
+                onClick={retryUpload}
+                disabled={isLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                Retry Upload
+              </button>
+            </div>
+          )}
+        </div>
       </form>
     </div>
   );
