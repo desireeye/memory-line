@@ -1,8 +1,8 @@
 'use client';
 
-import { AuthProvider } from '@/hooks/useAuth';
 import Navbar from '@/components/Navbar';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import SessionProvider from '@/components/SessionProvider';
 import './globals.css';
 
 export default function RootLayout({ children }) {
@@ -10,14 +10,14 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <ErrorBoundary>
-          <AuthProvider>
+          <SessionProvider>
             <div className="min-h-screen bg-gray-50">
               <Navbar />
               <main className="max-w-6xl mx-auto py-8 px-4">
                 {children}
               </main>
             </div>
-          </AuthProvider>
+          </SessionProvider>
         </ErrorBoundary>
       </body>
     </html>
