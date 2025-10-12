@@ -2,16 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { supabase } from '@/lib/supabaseClient';
 import { format } from 'date-fns';
 
 export default function CommentSection({ memoryId }) {
@@ -23,24 +14,41 @@ export default function CommentSection({ memoryId }) {
   useEffect(() => {
     if (!memoryId) return;
 
-    // Subscribe to comments in real-time
-    const commentsRef = collection(db, 'comments');
-    const q = query(
-      commentsRef,
-      where('memoryId', '==', memoryId),
-      orderBy('createdAt', 'desc')
-    );
+    let isMounted = true;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const commentsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
+    const fetchComments = async () => {
+      const { data, error } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('memory_id', memoryId)
+        .order('created_at', { ascending: false });
+      if (error) return;
+      if (!isMounted) return;
+      const commentsData = (data || []).map(row => ({
+        id: row.id,
+        memoryId: row.memory_id,
+        userId: row.user_id,
+        userPhoto: row.user_photo,
+        userName: row.user_name,
+        text: row.text,
+        createdAt: row.created_at ? new Date(row.created_at) : null,
       }));
       setComments(commentsData);
-    });
+    };
 
-    return () => unsubscribe();
+    fetchComments();
+
+    const channel = supabase
+      .channel('comments-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `memory_id=eq.${memoryId}` }, () => {
+        fetchComments();
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
   }, [memoryId]);
 
   const handleSubmit = async (e) => {
@@ -49,14 +57,16 @@ export default function CommentSection({ memoryId }) {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'comments'), {
-        memoryId,
-        userId: user.uid,
-        userPhoto: user.photoURL,
-        userName: user.displayName,
-        text: newComment.trim(),
-        createdAt: serverTimestamp(),
-      });
+      const { error } = await supabase.from('comments').insert([
+        {
+          memory_id: memoryId,
+          user_id: user.uid,
+          user_photo: user.photoURL,
+          user_name: user.displayName,
+          text: newComment.trim(),
+        },
+      ]);
+      if (error) throw error;
       setNewComment('');
     } catch (error) {
       console.error('Error adding comment:', error);

@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { supabase } from '@/lib/supabaseClient';
 import { motion } from 'framer-motion';
 import MemoryCard from '@/components/MemoryCard';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,31 +17,36 @@ export default function PublicTimeline({ params }) {
     const fetchUserAndMemories = async () => {
       try {
         // First, find the user by their custom URL or UID
-        const usersRef = collection(db, 'users');
-        const userQuery = query(
-          usersRef,
-          where('customUrl', '==', username)
-        );
-        let userSnapshot = await getDocs(userQuery);
-        
-        // If no user found by customUrl, try by UID
-        if (userSnapshot.empty) {
-          const uidQuery = query(
-            usersRef,
-            where('uid', '==', username)
-          );
-          userSnapshot = await getDocs(uidQuery);
+        const { data: byUrl, error: userErr1 } = await supabase
+          .from('users')
+          .select('*')
+          .eq('custom_url', username)
+          .limit(1);
+        if (userErr1) throw userErr1;
+
+        let foundUser = byUrl?.[0];
+        if (!foundUser) {
+          const { data: byId, error: userErr2 } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', username)
+            .limit(1);
+          if (userErr2) throw userErr2;
+          foundUser = byId?.[0];
         }
 
-        if (userSnapshot.empty) {
+        if (!foundUser) {
           setError('User not found');
           setLoading(false);
           return;
         }
 
         const userData = {
-          id: userSnapshot.docs[0].id,
-          ...userSnapshot.docs[0].data()
+          id: foundUser.id,
+          name: foundUser.name,
+          bio: foundUser.bio,
+          profilePhoto: foundUser.profile_photo,
+          isPublic: foundUser.is_public,
         };
 
         // Check if profile is public
@@ -55,18 +59,22 @@ export default function PublicTimeline({ params }) {
         setUser(userData);
 
         // Fetch the user's public memories
-        const memoriesRef = collection(db, 'memories');
-        const memoriesQuery = query(
-          memoriesRef,
-          where('userId', '==', userData.id),
-          where('isPrivate', '==', false),
-          orderBy('date', 'desc')
-        );
-
-        const memoriesSnapshot = await getDocs(memoriesQuery);
-        const memoriesData = memoriesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+        const { data: mems, error: memErr } = await supabase
+          .from('memories')
+          .select('*')
+          .eq('user_id', userData.id)
+          .eq('is_private', false)
+          .order('date', { ascending: false });
+        if (memErr) throw memErr;
+        const memoriesData = (mems || []).map((row) => ({
+          id: row.id,
+          title: row.title,
+          story: row.story,
+          date: row.date,
+          tags: row.tags || [],
+          mediaUrl: row.media_url || '',
+          type: row.type || '',
+          isPrivate: row.is_private || false,
         }));
 
         setMemories(memoriesData);

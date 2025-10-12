@@ -2,20 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { supabase } from '@/lib/supabaseClient';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -41,27 +28,31 @@ export default function Collections() {
     if (!user) return;
 
     try {
-      const collectionsRef = collection(db, 'collections');
-      const q = query(
-        collectionsRef,
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const snapshot = await getDocs(q);
-      const collectionsData = await Promise.all(snapshot.docs.map(async doc => {
-        const data = { id: doc.id, ...doc.data() };
-        
+      const { data, error } = await supabase
+        .from('collections')
+        .select('*')
+        .eq('user_id', user.uid)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      const collectionsData = [];
+      for (const col of data || []) {
         // Get memory count for each collection
-        const memoryQuery = query(
-          collection(db, 'collection_memories'),
-          where('collectionId', '==', doc.id)
-        );
-        const memorySnapshot = await getDocs(memoryQuery);
-        data.memoryCount = memorySnapshot.size;
-        
-        return data;
-      }));
+        const { count, error: countErr } = await supabase
+          .from('collection_memories')
+          .select('*', { count: 'exact', head: true })
+          .eq('collection_id', col.id);
+        if (countErr) throw countErr;
+
+        collectionsData.push({
+          id: col.id,
+          name: col.name,
+          description: col.description,
+          coverImage: col.cover_image,
+          isPrivate: col.is_private,
+          memoryCount: count || 0,
+        });
+      }
       
       setCollections(collectionsData);
     } catch (error) {
@@ -78,20 +69,25 @@ export default function Collections() {
     try {
       let coverUrl = '';
       if (coverImage) {
-        const storageRef = ref(storage, `collections/${user.uid}/${Date.now()}_${coverImage.name}`);
-        await uploadBytes(storageRef, coverImage);
-        coverUrl = await getDownloadURL(storageRef);
+        const storagePath = `${user.uid}/${Date.now()}_${coverImage.name}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('collections')
+          .upload(storagePath, coverImage, { contentType: coverImage.type, upsert: false });
+        if (uploadErr) throw uploadErr;
+        const { data } = supabase.storage.from('collections').getPublicUrl(storagePath);
+        coverUrl = data?.publicUrl || '';
       }
 
-      await addDoc(collection(db, 'collections'), {
-        userId: user.uid,
-        name: newCollection.name,
-        description: newCollection.description,
-        coverImage: coverUrl,
-        isPrivate: newCollection.isPrivate,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      const { error: insertErr } = await supabase.from('collections').insert([
+        {
+          user_id: user.uid,
+          name: newCollection.name,
+          description: newCollection.description,
+          cover_image: coverUrl,
+          is_private: newCollection.isPrivate,
+        },
+      ]);
+      if (insertErr) throw insertErr;
 
       setNewCollection({ name: '', description: '', isPrivate: false });
       setCoverImage(null);
@@ -176,7 +172,7 @@ export default function Collections() {
                     {collection.description}
                   </p>
                   <div className="text-sm text-gray-500">
-                    {collection.memoryCount} {collection.memoryCount === 1 ? 'memory' : 'memories'}
+          {collection.memoryCount} {collection.memoryCount === 1 ? 'memory' : 'memories'}
                   </div>
                 </div>
               </motion.div>

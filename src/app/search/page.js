@@ -2,16 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  startAt,
-  endAt,
-  getDocs,
-} from 'firebase/firestore';
+import { supabase } from '@/lib/supabaseClient';
 import { motion } from 'framer-motion';
 import MemoryCard from '@/components/MemoryCard';
 
@@ -29,16 +20,16 @@ export default function SearchPage() {
     const fetchTags = async () => {
       if (!user) return;
       
-      const memoriesRef = collection(db, 'memories');
-      const q = query(memoriesRef, where('userId', '==', user.uid));
-      const snapshot = await getDocs(q);
-      
+      const { data, error } = await supabase
+        .from('memories')
+        .select('tags')
+        .eq('user_id', user.uid);
+      if (error) return;
+
       const tags = new Set();
-      snapshot.docs.forEach(doc => {
-        const memory = doc.data();
-        memory.tags?.forEach(tag => tags.add(tag));
+      (data || []).forEach(row => {
+        (row.tags || []).forEach(tag => tags.add(tag));
       });
-      
       setAvailableTags(Array.from(tags));
     };
 
@@ -50,24 +41,30 @@ export default function SearchPage() {
     
     setLoading(true);
     try {
-      const memoriesRef = collection(db, 'memories');
-      let q = query(memoriesRef, where('userId', '==', user.uid));
+      let queryBuilder = supabase
+        .from('memories')
+        .select('*')
+        .eq('user_id', user.uid);
 
-      // Add date range filter if provided
       if (dateRange.start && dateRange.end) {
-        q = query(q, 
-          where('date', '>=', dateRange.start),
-          where('date', '<=', dateRange.end)
-        );
+        queryBuilder = queryBuilder
+          .gte('date', dateRange.start)
+          .lte('date', dateRange.end);
       }
 
-      // Get all matching documents
-      const snapshot = await getDocs(q);
-      
+      const { data, error } = await queryBuilder;
+      if (error) throw error;
+
       // Filter results client-side for text search and tags
-      let results = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      let results = (data || []).map(row => ({
+        id: row.id,
+        title: row.title,
+        story: row.story,
+        date: row.date,
+        tags: row.tags || [],
+        mediaUrl: row.media_url || '',
+        type: row.type || '',
+        isPrivate: row.is_private || false,
       }));
 
       // Apply text search filter
