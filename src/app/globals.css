@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .btn-primary {
+    @apply bg-pastel-blue text-white px-4 py-2 rounded hover:bg-blue-500;
+  }
+  .btn-secondary {
+    @apply bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-600;
+  }
+}
+
+@layer utilities {
+  .bg-pastel-pink {
+    background-color: #ffe4e1;
+  }
+  .bg-pastel-blue {
+    background-color: #a2d2ff;
+  }
+}
