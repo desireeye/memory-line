@@ -1,28 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  addDoc,
-  deleteDoc,
-  query,
-  where,
-  onSnapshot,
-  getDocs,
-} from 'firebase/firestore';
+import { useSession } from 'next-auth/react';
 
 const REACTIONS = {
-  '❤️': 'heart',
-  '👍': 'thumbsup',
-  '🎉': 'celebrate',
-  '😊': 'smile',
-  '🤗': 'hug',
+  '❤️': 'love',
+  '😂': 'laugh',
+  '😮': 'wow',
+  '😢': 'sad',
+  '😡': 'angry',
+  '👍': 'like'
 };
 
 export default function ReactionSection({ memoryId }) {
-  const { user } = useAuth();
+  const { data: session } = useSession();
   const [reactions, setReactions] = useState({});
   const [userReactions, setUserReactions] = useState({});
   const [showReactionPicker, setShowReactionPicker] = useState(false);
@@ -30,32 +21,14 @@ export default function ReactionSection({ memoryId }) {
   useEffect(() => {
     if (!memoryId) return;
 
-    // Listen to reactions in real-time
-    const reactionsRef = collection(db, 'reactions');
-    const q = query(reactionsRef, where('memoryId', '==', memoryId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reactionCounts = {};
-      const userReacts = {};
-
-      snapshot.docs.forEach((doc) => {
-        const reaction = doc.data();
-        reactionCounts[reaction.type] = (reactionCounts[reaction.type] || 0) + 1;
-        
-        if (reaction.userId === user?.uid) {
-          userReacts[reaction.type] = doc.id;
-        }
-      });
-
-      setReactions(reactionCounts);
-      setUserReactions(userReacts);
-    });
-
-    return () => unsubscribe();
-  }, [memoryId, user]);
+    // For now, return empty reactions
+    // You can implement reactions API later
+    setReactions({});
+    setUserReactions({});
+  }, [memoryId]);
 
   const handleReaction = async (emoji) => {
-    if (!user) return;
+    if (!session?.user) return;
 
     try {
       const reactionType = REACTIONS[emoji];
@@ -63,65 +36,70 @@ export default function ReactionSection({ memoryId }) {
 
       if (existingReactionId) {
         // Remove reaction
-        await deleteDoc(collection(db, 'reactions', existingReactionId));
+        setReactions(prev => ({
+          ...prev,
+          [reactionType]: (prev[reactionType] || 1) - 1
+        }));
+        setUserReactions(prev => {
+          const newReactions = { ...prev };
+          delete newReactions[reactionType];
+          return newReactions;
+        });
       } else {
         // Add reaction
-        await addDoc(collection(db, 'reactions'), {
-          memoryId,
-          userId: user.uid,
-          userName: user.displayName,
-          type: reactionType,
-          emoji,
-          createdAt: new Date(),
-        });
+        setReactions(prev => ({
+          ...prev,
+          [reactionType]: (prev[reactionType] || 0) + 1
+        }));
+        setUserReactions(prev => ({
+          ...prev,
+          [reactionType]: Date.now() // Temporary ID
+        }));
       }
     } catch (error) {
-      console.error('Error toggling reaction:', error);
+      console.error('Error handling reaction:', error);
     }
   };
 
   return (
-    <div className="mt-4 flex items-center gap-2">
-      <div className="relative">
+    <div className="mt-4">
+      <div className="flex items-center space-x-2">
         <button
           onClick={() => setShowReactionPicker(!showReactionPicker)}
-          className="text-gray-500 hover:text-gray-700 transition-colors"
+          className="text-gray-500 hover:text-gray-700 text-sm"
         >
-          <span className="text-xl">😊</span>
-          <span className="ml-1 text-sm">React</span>
+          React
         </button>
-
-        {showReactionPicker && (
-          <div className="absolute bottom-full left-0 mb-2 bg-white rounded-lg shadow-lg p-2 flex gap-2 border">
-            {Object.entries(REACTIONS).map(([emoji, type]) => (
-              <button
-                key={type}
-                onClick={() => {
-                  handleReaction(emoji);
-                  setShowReactionPicker(false);
-                }}
-                className="text-2xl hover:scale-125 transition-transform"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-2">
+        
         {Object.entries(reactions).map(([type, count]) => (
           <div
             key={type}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm ${
-              userReactions[type] ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-            }`}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm bg-gray-100 text-gray-800"
           >
             <span>{Object.entries(REACTIONS).find(([_, t]) => t === type)?.[0]}</span>
             <span>{count}</span>
           </div>
         ))}
       </div>
+
+      {showReactionPicker && (
+        <div className="mt-2 flex space-x-2">
+          {Object.entries(REACTIONS).map(([emoji, type]) => (
+            <button
+              key={emoji}
+              onClick={() => {
+                handleReaction(emoji);
+                setShowReactionPicker(false);
+              }}
+              className={`text-2xl hover:scale-110 transition-transform ${
+                userReactions[type] ? 'opacity-100' : 'opacity-60 hover:opacity-100'
+              }`}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

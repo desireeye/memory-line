@@ -1,255 +1,116 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import Image from 'next/image';
-import { motion } from 'framer-motion';
+import { useSession } from 'next-auth/react';
 
 export default function ProfilePage() {
-  const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: '',
-    bio: '',
-    profilePhoto: '',
-    isPublic: false,
-    customUrl: '',
-  });
-  const [memoryStats, setMemoryStats] = useState({
-    total: 0,
-    thisMonth: 0,
-    thisYear: 0,
-  });
-  const [newProfilePhoto, setNewProfilePhoto] = useState(null);
+  const { data: session, status } = useSession();
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchProfileData = async () => {
-      if (!user) return;
-
-      try {
-        const profileRef = doc(db, 'users', user.uid);
-        const profileSnap = await getDoc(profileRef);
-
-        if (profileSnap.exists()) {
-          setProfileData(profileSnap.data());
-        } else {
-          // Create default profile if it doesn't exist
-          const defaultProfile = {
-            name: user.displayName || '',
-            bio: '',
-            profilePhoto: user.photoURL || '',
-            isPublic: false,
-            customUrl: '',
-          };
-          await updateDoc(profileRef, defaultProfile);
-          setProfileData(defaultProfile);
-        }
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchProfileData();
-  }, [user]);
-
-  const handlePhotoChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setNewProfilePhoto(file);
+    if (session?.user) {
+      fetchProfile();
     }
-  };
+  }, [session]);
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setProfileData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-
-    setIsLoading(true);
+  const fetchProfile = async () => {
     try {
-      let photoUrl = profileData.profilePhoto;
-
-      if (newProfilePhoto) {
-        const storageRef = ref(storage, `profiles/${user.uid}/${Date.now()}_${newProfilePhoto.name}`);
-        await uploadBytes(storageRef, newProfilePhoto);
-        photoUrl = await getDownloadURL(storageRef);
-      }
-
-      const profileRef = doc(db, 'users', user.uid);
-      await updateDoc(profileRef, {
-        ...profileData,
-        profilePhoto: photoUrl,
+      setLoading(true);
+      // For now, use session data
+      setProfile({
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image,
+        bio: '',
+        isPublic: false
       });
-
-      setProfileData(prev => ({
-        ...prev,
-        profilePhoto: photoUrl,
-      }));
-      setIsEditing(false);
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      alert('Failed to update profile. Please try again.');
+    } catch (err) {
+      setError('Failed to fetch profile');
+      console.error('Error fetching profile:', err);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (status === 'loading') {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pastel-blue"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated') {
+    return (
+      <div className="max-w-4xl mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-6">Profile</h1>
+        <p className="text-gray-600">Please sign in to view your profile.</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-6">Profile</h1>
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-lg shadow-md p-6"
-      >
-        <div className="flex items-start gap-8">
-          {/* Profile Photo */}
-          <div className="relative">
-            <div className="relative h-32 w-32 rounded-full overflow-hidden">
-              <Image
-                src={profileData.profilePhoto || '/default-avatar.png'}
-                alt="Profile"
-                fill
-                className="object-cover"
-              />
-            </div>
-            {isEditing && (
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoChange}
-                className="mt-2 w-full text-sm"
-              />
-            )}
-          </div>
-
-          {/* Profile Info */}
-          <div className="flex-1">
-            {isEditing ? (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Name</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={profileData.name}
-                    onChange={handleInputChange}
-                    className="mt-1 w-full px-3 py-2 border rounded-md"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Bio</label>
-                  <textarea
-                    name="bio"
-                    value={profileData.bio}
-                    onChange={handleInputChange}
-                    rows={3}
-                    className="mt-1 w-full px-3 py-2 border rounded-md"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="isPublic"
-                    checked={profileData.isPublic}
-                    onChange={handleInputChange}
-                    className="h-4 w-4 text-pastel-blue"
-                  />
-                  <label className="text-sm text-gray-700">Make profile public</label>
-                </div>
-
-                {profileData.isPublic && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Custom URL</label>
-                    <input
-                      type="text"
-                      name="customUrl"
-                      value={profileData.customUrl}
-                      onChange={handleInputChange}
-                      placeholder="your-custom-url"
-                      className="mt-1 w-full px-3 py-2 border rounded-md"
-                    />
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <button type="submit" className="btn-primary">
-                    Save Changes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(false)}
-                    className="btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h1 className="text-2xl font-bold">{profileData.name}</h1>
-                    <p className="text-gray-600 mt-2">{profileData.bio || 'No bio yet'}</p>
-                  </div>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="btn-secondary"
-                  >
-                    Edit Profile
-                  </button>
-                </div>
-
-                {profileData.isPublic && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-md">
-                    <h3 className="font-medium mb-2">Public Profile URL</h3>
-                    <p className="text-sm text-gray-600">
-                      {`${window.location.origin}/${profileData.customUrl || user.uid}`}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+    <div className="max-w-4xl mx-auto p-4">
+      <h1 className="text-3xl font-bold mb-6">Profile</h1>
+      
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center space-x-4 mb-6">
+          {profile?.image && (
+            <img
+              className="h-20 w-20 rounded-full"
+              src={profile.image}
+              alt={profile.name || 'User'}
+            />
+          )}
+          <div>
+            <h2 className="text-2xl font-semibold">{profile?.name || 'User'}</h2>
+            <p className="text-gray-600">{profile?.email}</p>
           </div>
         </div>
-
-        {/* Stats Section */}
-        <div className="mt-8 grid grid-cols-3 gap-4">
-          <div className="bg-pastel-pink bg-opacity-20 p-4 rounded-lg text-center">
-            <h3 className="text-2xl font-bold">{memoryStats.total}</h3>
-            <p className="text-sm text-gray-600">Total Memories</p>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Bio
+            </label>
+            <textarea
+              className="w-full border border-gray-300 rounded-md p-2"
+              rows={3}
+              placeholder="Tell us about yourself..."
+              defaultValue={profile?.bio || ''}
+            />
           </div>
-          <div className="bg-pastel-blue bg-opacity-20 p-4 rounded-lg text-center">
-            <h3 className="text-2xl font-bold">{memoryStats.thisMonth}</h3>
-            <p className="text-sm text-gray-600">This Month</p>
+          
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="isPublic"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              defaultChecked={profile?.isPublic || false}
+            />
+            <label htmlFor="isPublic" className="ml-2 text-sm text-gray-700">
+              Make my profile public
+            </label>
           </div>
-          <div className="bg-pastel-pink bg-opacity-20 p-4 rounded-lg text-center">
-            <h3 className="text-2xl font-bold">{memoryStats.thisYear}</h3>
-            <p className="text-sm text-gray-600">This Year</p>
-          </div>
+          
+          <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Save Changes
+          </button>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
