@@ -2,20 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { supabase } from '@/lib/supabase';
+import { getUserCollections, createCollection } from '@/lib/database';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -28,7 +16,7 @@ export default function Collections() {
   const [newCollection, setNewCollection] = useState({
     name: '',
     description: '',
-    isPrivate: false,
+    is_private: false,
   });
   const [coverImage, setCoverImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -41,28 +29,7 @@ export default function Collections() {
     if (!user) return;
 
     try {
-      const collectionsRef = collection(db, 'collections');
-      const q = query(
-        collectionsRef,
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const snapshot = await getDocs(q);
-      const collectionsData = await Promise.all(snapshot.docs.map(async doc => {
-        const data = { id: doc.id, ...doc.data() };
-        
-        // Get memory count for each collection
-        const memoryQuery = query(
-          collection(db, 'collection_memories'),
-          where('collectionId', '==', doc.id)
-        );
-        const memorySnapshot = await getDocs(memoryQuery);
-        data.memoryCount = memorySnapshot.size;
-        
-        return data;
-      }));
-      
+      const collectionsData = await getUserCollections(user.uid);
       setCollections(collectionsData);
     } catch (error) {
       console.error('Error fetching collections:', error);
@@ -78,22 +45,29 @@ export default function Collections() {
     try {
       let coverUrl = '';
       if (coverImage) {
-        const storageRef = ref(storage, `collections/${user.uid}/${Date.now()}_${coverImage.name}`);
-        await uploadBytes(storageRef, coverImage);
-        coverUrl = await getDownloadURL(storageRef);
+        const filePath = `${user.uid}/${Date.now()}_${coverImage.name}`;
+        const { data, error } = await supabase.storage
+          .from('collections')
+          .upload(filePath, coverImage);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('collections')
+          .getPublicUrl(filePath);
+
+        coverUrl = publicUrl;
       }
 
-      await addDoc(collection(db, 'collections'), {
-        userId: user.uid,
+      await createCollection({
+        user_id: user.uid,
         name: newCollection.name,
         description: newCollection.description,
-        coverImage: coverUrl,
-        isPrivate: newCollection.isPrivate,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        cover_image: coverUrl,
+        is_private: newCollection.is_private,
       });
 
-      setNewCollection({ name: '', description: '', isPrivate: false });
+      setNewCollection({ name: '', description: '', is_private: false });
       setCoverImage(null);
       setPreviewUrl(null);
       setShowCreateModal(false);
@@ -150,9 +124,9 @@ export default function Collections() {
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
               >
                 <div className="relative h-48">
-                  {collection.coverImage ? (
+                  {collection.cover_image ? (
                     <Image
-                      src={collection.coverImage}
+                      src={collection.cover_image}
                       alt={collection.name}
                       fill
                       className="object-cover"
@@ -162,7 +136,7 @@ export default function Collections() {
                       <span className="text-4xl">📸</span>
                     </div>
                   )}
-                  {collection.isPrivate && (
+                  {collection.is_private && (
                     <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded-full text-xs">
                       Private
                     </div>
@@ -176,7 +150,7 @@ export default function Collections() {
                     {collection.description}
                   </p>
                   <div className="text-sm text-gray-500">
-                    {collection.memoryCount} {collection.memoryCount === 1 ? 'memory' : 'memories'}
+                    {collection.collection_memories?.length || 0} memories
                   </div>
                 </div>
               </motion.div>
@@ -199,7 +173,6 @@ export default function Collections() {
         </div>
       )}
 
-      {/* Create Collection Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <motion.div
@@ -259,12 +232,12 @@ export default function Collections() {
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="isPrivate"
-                  checked={newCollection.isPrivate}
-                  onChange={(e) => setNewCollection(prev => ({ ...prev, isPrivate: e.target.checked }))}
+                  id="is_private"
+                  checked={newCollection.is_private}
+                  onChange={(e) => setNewCollection(prev => ({ ...prev, is_private: e.target.checked }))}
                   className="h-4 w-4 text-pastel-blue focus:ring-pastel-blue border-gray-300 rounded"
                 />
-                <label htmlFor="isPrivate" className="text-sm text-gray-700">
+                <label htmlFor="is_private" className="text-sm text-gray-700">
                   Make this collection private
                 </label>
               </div>

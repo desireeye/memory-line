@@ -1,11 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { getUserByCustomUrl, getUserMemories } from '@/lib/database';
 import { motion } from 'framer-motion';
 import MemoryCard from '@/components/MemoryCard';
-import { useAuth } from '@/hooks/useAuth';
 
 export default function PublicTimeline({ params }) {
   const { username } = params;
@@ -17,36 +15,15 @@ export default function PublicTimeline({ params }) {
   useEffect(() => {
     const fetchUserAndMemories = async () => {
       try {
-        // First, find the user by their custom URL or UID
-        const usersRef = collection(db, 'users');
-        const userQuery = query(
-          usersRef,
-          where('customUrl', '==', username)
-        );
-        let userSnapshot = await getDocs(userQuery);
-        
-        // If no user found by customUrl, try by UID
-        if (userSnapshot.empty) {
-          const uidQuery = query(
-            usersRef,
-            where('uid', '==', username)
-          );
-          userSnapshot = await getDocs(uidQuery);
-        }
+        const userData = await getUserByCustomUrl(username);
 
-        if (userSnapshot.empty) {
+        if (!userData) {
           setError('User not found');
           setLoading(false);
           return;
         }
 
-        const userData = {
-          id: userSnapshot.docs[0].id,
-          ...userSnapshot.docs[0].data()
-        };
-
-        // Check if profile is public
-        if (!userData.isPublic) {
+        if (!userData.is_public) {
           setError('This profile is private');
           setLoading(false);
           return;
@@ -54,21 +31,7 @@ export default function PublicTimeline({ params }) {
 
         setUser(userData);
 
-        // Fetch the user's public memories
-        const memoriesRef = collection(db, 'memories');
-        const memoriesQuery = query(
-          memoriesRef,
-          where('userId', '==', userData.id),
-          where('isPrivate', '==', false),
-          orderBy('date', 'desc')
-        );
-
-        const memoriesSnapshot = await getDocs(memoriesQuery);
-        const memoriesData = memoriesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
+        const memoriesData = await getUserMemories(userData.id, { isPrivate: false });
         setMemories(memoriesData);
       } catch (error) {
         console.error('Error fetching timeline:', error);
@@ -107,16 +70,15 @@ export default function PublicTimeline({ params }) {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* User Profile Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-center mb-12"
       >
-        {user.profilePhoto && (
+        {user.profile_photo && (
           <div className="w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden">
             <img
-              src={user.profilePhoto}
+              src={user.profile_photo}
               alt={user.name}
               className="w-full h-full object-cover"
             />
@@ -128,7 +90,6 @@ export default function PublicTimeline({ params }) {
         )}
       </motion.div>
 
-      {/* Memories Timeline */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -142,10 +103,8 @@ export default function PublicTimeline({ params }) {
           </div>
         ) : (
           <div className="relative">
-            {/* Vertical timeline line */}
             <div className="absolute left-1/2 top-0 bottom-0 w-px bg-pastel-blue -z-10" />
             
-            {/* Memory cards */}
             {memories.map((memory, index) => (
               <MemoryCard key={memory.id} memory={memory} index={index} />
             ))}

@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { supabase } from '@/lib/supabase';
+import { getUserProfile, updateUserProfile, createUserProfile } from '@/lib/database';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 
@@ -15,9 +14,9 @@ export default function ProfilePage() {
   const [profileData, setProfileData] = useState({
     name: '',
     bio: '',
-    profilePhoto: '',
-    isPublic: false,
-    customUrl: '',
+    profile_photo: '',
+    is_public: false,
+    custom_url: '',
   });
   const [memoryStats, setMemoryStats] = useState({
     total: 0,
@@ -31,23 +30,20 @@ export default function ProfilePage() {
       if (!user) return;
 
       try {
-        const profileRef = doc(db, 'users', user.uid);
-        const profileSnap = await getDoc(profileRef);
+        let profile = await getUserProfile(user.uid);
 
-        if (profileSnap.exists()) {
-          setProfileData(profileSnap.data());
-        } else {
-          // Create default profile if it doesn't exist
+        if (!profile) {
           const defaultProfile = {
             name: user.displayName || '',
             bio: '',
-            profilePhoto: user.photoURL || '',
-            isPublic: false,
-            customUrl: '',
+            profile_photo: user.photoURL || '',
+            is_public: false,
+            custom_url: '',
           };
-          await updateDoc(profileRef, defaultProfile);
-          setProfileData(defaultProfile);
+          profile = await createUserProfile(user.uid, defaultProfile);
         }
+        
+        setProfileData(profile);
       } catch (error) {
         console.error('Error fetching profile:', error);
       } finally {
@@ -79,23 +75,31 @@ export default function ProfilePage() {
 
     setIsLoading(true);
     try {
-      let photoUrl = profileData.profilePhoto;
+      let photoUrl = profileData.profile_photo;
 
       if (newProfilePhoto) {
-        const storageRef = ref(storage, `profiles/${user.uid}/${Date.now()}_${newProfilePhoto.name}`);
-        await uploadBytes(storageRef, newProfilePhoto);
-        photoUrl = await getDownloadURL(storageRef);
+        const filePath = `${user.uid}/${Date.now()}_${newProfilePhoto.name}`;
+        const { data, error } = await supabase.storage
+          .from('profiles')
+          .upload(filePath, newProfilePhoto);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('profiles')
+          .getPublicUrl(filePath);
+
+        photoUrl = publicUrl;
       }
 
-      const profileRef = doc(db, 'users', user.uid);
-      await updateDoc(profileRef, {
+      await updateUserProfile(user.uid, {
         ...profileData,
-        profilePhoto: photoUrl,
+        profile_photo: photoUrl,
       });
 
       setProfileData(prev => ({
         ...prev,
-        profilePhoto: photoUrl,
+        profile_photo: photoUrl,
       }));
       setIsEditing(false);
     } catch (error) {
@@ -122,11 +126,10 @@ export default function ProfilePage() {
         className="bg-white rounded-lg shadow-md p-6"
       >
         <div className="flex items-start gap-8">
-          {/* Profile Photo */}
           <div className="relative">
             <div className="relative h-32 w-32 rounded-full overflow-hidden">
               <Image
-                src={profileData.profilePhoto || '/default-avatar.png'}
+                src={profileData.profile_photo || '/default-avatar.png'}
                 alt="Profile"
                 fill
                 className="object-cover"
@@ -142,7 +145,6 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {/* Profile Info */}
           <div className="flex-1">
             {isEditing ? (
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -171,21 +173,21 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    name="isPublic"
-                    checked={profileData.isPublic}
+                    name="is_public"
+                    checked={profileData.is_public}
                     onChange={handleInputChange}
                     className="h-4 w-4 text-pastel-blue"
                   />
                   <label className="text-sm text-gray-700">Make profile public</label>
                 </div>
 
-                {profileData.isPublic && (
+                {profileData.is_public && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Custom URL</label>
                     <input
                       type="text"
-                      name="customUrl"
-                      value={profileData.customUrl}
+                      name="custom_url"
+                      value={profileData.custom_url}
                       onChange={handleInputChange}
                       placeholder="your-custom-url"
                       className="mt-1 w-full px-3 py-2 border rounded-md"
@@ -221,11 +223,11 @@ export default function ProfilePage() {
                   </button>
                 </div>
 
-                {profileData.isPublic && (
+                {profileData.is_public && (
                   <div className="mt-4 p-4 bg-gray-50 rounded-md">
                     <h3 className="font-medium mb-2">Public Profile URL</h3>
                     <p className="text-sm text-gray-600">
-                      {`${window.location.origin}/${profileData.customUrl || user.uid}`}
+                      {`${typeof window !== 'undefined' ? window.location.origin : ''}/${profileData.custom_url || user.uid}`}
                     </p>
                   </div>
                 )}
@@ -234,7 +236,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Stats Section */}
         <div className="mt-8 grid grid-cols-3 gap-4">
           <div className="bg-pastel-pink bg-opacity-20 p-4 rounded-lg text-center">
             <h3 className="text-2xl font-bold">{memoryStats.total}</h3>
