@@ -2,16 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { getMemoryComments, createComment, subscribeToComments } from '@/lib/database';
 import { format } from 'date-fns';
 
 export default function CommentSection({ memoryId }) {
@@ -23,24 +14,18 @@ export default function CommentSection({ memoryId }) {
   useEffect(() => {
     if (!memoryId) return;
 
-    // Subscribe to comments in real-time
-    const commentsRef = collection(db, 'comments');
-    const q = query(
-      commentsRef,
-      where('memoryId', '==', memoryId),
-      orderBy('createdAt', 'desc')
-    );
+    const loadComments = async () => {
+      const data = await getMemoryComments(memoryId);
+      setComments(data);
+    };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const commentsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-      }));
-      setComments(commentsData);
+    loadComments();
+
+    const unsubscribe = subscribeToComments(memoryId, (payload) => {
+      loadComments();
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, [memoryId]);
 
   const handleSubmit = async (e) => {
@@ -49,13 +34,12 @@ export default function CommentSection({ memoryId }) {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'comments'), {
-        memoryId,
-        userId: user.uid,
-        userPhoto: user.photoURL,
-        userName: user.displayName,
+      await createComment({
+        memory_id: memoryId,
+        user_id: user.uid,
+        user_photo: user.photoURL,
+        user_name: user.displayName,
         text: newComment.trim(),
-        createdAt: serverTimestamp(),
       });
       setNewComment('');
     } catch (error) {
@@ -70,7 +54,6 @@ export default function CommentSection({ memoryId }) {
     <div className="mt-6">
       <h3 className="text-lg font-semibold mb-4">Comments</h3>
 
-      {/* Add Comment Form */}
       {user && (
         <form onSubmit={handleSubmit} className="mb-6">
           <div className="flex gap-2">
@@ -93,24 +76,23 @@ export default function CommentSection({ memoryId }) {
         </form>
       )}
 
-      {/* Comments List */}
       <div className="space-y-4">
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3 items-start">
-            {comment.userPhoto && (
+            {comment.user_photo && (
               <img
-                src={comment.userPhoto}
-                alt={comment.userName}
+                src={comment.user_photo}
+                alt={comment.user_name}
                 className="w-8 h-8 rounded-full"
               />
             )}
             <div className="flex-1">
               <div className="bg-gray-50 rounded-lg px-4 py-2">
-                <div className="font-medium text-sm">{comment.userName}</div>
+                <div className="font-medium text-sm">{comment.user_name}</div>
                 <p className="text-gray-700">{comment.text}</p>
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {comment.createdAt && format(comment.createdAt, 'MMM d, yyyy • h:mm a')}
+                {comment.created_at && format(new Date(comment.created_at), 'MMM d, yyyy • h:mm a')}
               </div>
             </div>
           </div>

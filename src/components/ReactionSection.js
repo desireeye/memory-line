@@ -2,16 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  addDoc,
-  deleteDoc,
-  query,
-  where,
-  onSnapshot,
-  getDocs,
-} from 'firebase/firestore';
+import { getMemoryReactions, addReaction, deleteReaction, subscribeToReactions } from '@/lib/database';
 
 const REACTIONS = {
   '❤️': 'heart',
@@ -30,28 +21,30 @@ export default function ReactionSection({ memoryId }) {
   useEffect(() => {
     if (!memoryId) return;
 
-    // Listen to reactions in real-time
-    const reactionsRef = collection(db, 'reactions');
-    const q = query(reactionsRef, where('memoryId', '==', memoryId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const loadReactions = async () => {
+      const data = await getMemoryReactions(memoryId);
       const reactionCounts = {};
       const userReacts = {};
 
-      snapshot.docs.forEach((doc) => {
-        const reaction = doc.data();
+      data.forEach((reaction) => {
         reactionCounts[reaction.type] = (reactionCounts[reaction.type] || 0) + 1;
         
-        if (reaction.userId === user?.uid) {
-          userReacts[reaction.type] = doc.id;
+        if (reaction.user_id === user?.uid) {
+          userReacts[reaction.type] = reaction.id;
         }
       });
 
       setReactions(reactionCounts);
       setUserReactions(userReacts);
+    };
+
+    loadReactions();
+
+    const unsubscribe = subscribeToReactions(memoryId, (payload) => {
+      loadReactions();
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, [memoryId, user]);
 
   const handleReaction = async (emoji) => {
@@ -62,17 +55,13 @@ export default function ReactionSection({ memoryId }) {
       const existingReactionId = userReactions[reactionType];
 
       if (existingReactionId) {
-        // Remove reaction
-        await deleteDoc(collection(db, 'reactions', existingReactionId));
+        await deleteReaction(existingReactionId);
       } else {
-        // Add reaction
-        await addDoc(collection(db, 'reactions'), {
-          memoryId,
-          userId: user.uid,
-          userName: user.displayName,
+        await addReaction({
+          memory_id: memoryId,
+          user_id: user.uid,
           type: reactionType,
           emoji,
-          createdAt: new Date(),
         });
       }
     } catch (error) {

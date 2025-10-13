@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
+import { createMemory } from '@/lib/database';
 import Image from 'next/image';
 import { compressImage } from '@/utils/imageCompression';
 import UploadStatus from '@/components/UploadStatus';
@@ -30,7 +29,6 @@ export default function AddMemory() {
     const file = e.target.files[0];
     if (file) {
       setMediaFile(file);
-      // Create preview URL for images
       if (file.type.startsWith('image/')) {
         const url = URL.createObjectURL(file);
         setPreviewUrl(url);
@@ -54,48 +52,36 @@ export default function AddMemory() {
     }
 
     if (isLoading || isProcessing) {
-      return; // Prevent multiple submissions
+      return;
     }
 
     setIsLoading(true);
     setIsProcessing(true);
     setUploadStatus({ show: true, message: 'Starting upload process...', progress: 0 });
+    
     try {
       let mediaUrl = '';
       if (mediaFile) {
         try {
           console.log('Starting file upload process...');
-          // Compress image if it's an image file
           const fileToUpload = mediaFile.type.startsWith('image/')
             ? await compressImage(mediaFile)
             : mediaFile;
           
-          console.log('File prepared for upload:', {
-            name: mediaFile.name,
-            type: mediaFile.type,
-            size: fileToUpload.size
-          });
-
-          // Upload media to Firebase Storage
           const fileName = `${Date.now()}_${mediaFile.name}`;
-          const storagePath = `memories/${user.uid}/${fileName}`;
-          console.log('Uploading to path:', storagePath);
+          const filePath = `${user.uid}/${fileName}`;
           
-          const storageRef = ref(storage, storagePath);
-          
-          // Create upload task
-          const uploadTask = uploadBytes(storageRef, fileToUpload);
-          
-          // Handle upload state
-          uploadTask.then((snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log('Upload progress:', progress.toFixed(2) + '%');
-          });
-          
-          const uploadResult = await uploadTask;
-          console.log('Upload completed:', uploadResult);
-          
-          mediaUrl = await getDownloadURL(storageRef);
+          const { data, error } = await supabase.storage
+            .from('memories')
+            .upload(filePath, fileToUpload);
+
+          if (error) throw error;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('memories')
+            .getPublicUrl(filePath);
+
+          mediaUrl = publicUrl;
           console.log('File URL obtained:', mediaUrl);
         } catch (uploadError) {
           console.error('Error during file upload:', uploadError);
@@ -103,30 +89,26 @@ export default function AddMemory() {
         }
       }
 
-      // Add memory to Firestore
       const memoryData = {
-        userId: user.uid,
+        user_id: user.uid,
         title: formData.title,
         story: formData.story,
         date: formData.date,
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-        mediaUrl,
+        media_url: mediaUrl,
         type: mediaFile ? mediaFile.type.split('/')[0] : '',
-        createdAt: serverTimestamp(),
-        isPrivate: formData.isPrivate,
+        is_private: formData.isPrivate,
       };
 
-      await addDoc(collection(db, 'memories'), memoryData);
+      await createMemory(memoryData);
       router.push('/memories');
     } catch (error) {
       console.error('Error adding memory:', error);
       let errorMessage = 'Failed to add memory. ';
       if (error.message.includes('File upload failed')) {
         errorMessage += 'There was a problem uploading your file. Please try again.';
-      } else if (error.code?.includes('storage/')) {
+      } else if (error.message?.includes('storage')) {
         errorMessage += 'Storage error: ' + error.message;
-      } else if (error.code?.includes('permission-denied')) {
-        errorMessage += 'You don\'t have permission to upload files.';
       } else {
         errorMessage += 'Please try again.';
       }
@@ -173,7 +155,7 @@ export default function AddMemory() {
                 src={previewUrl}
                 alt="Preview"
                 fill
-                className="object-contain rounded-md"
+                className="object-cover rounded-md"
               />
             </div>
           )}
@@ -190,22 +172,19 @@ export default function AddMemory() {
             onChange={handleInputChange}
             required
             className="w-full border border-gray-300 rounded-md p-2"
-            placeholder="Give your memory a title"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Your Story
+            Story
           </label>
           <textarea
             name="story"
             value={formData.story}
             onChange={handleInputChange}
-            required
             rows={4}
             className="w-full border border-gray-300 rounded-md p-2"
-            placeholder="Write about this memory..."
           />
         </div>
 
@@ -225,38 +204,35 @@ export default function AddMemory() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Tags
+            Tags (comma separated)
           </label>
           <input
             type="text"
             name="tags"
             value={formData.tags}
             onChange={handleInputChange}
+            placeholder="family, vacation, birthday"
             className="w-full border border-gray-300 rounded-md p-2"
-            placeholder="Add tags separated by commas (e.g., family, vacation, beach)"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center">
           <input
             type="checkbox"
-            id="isPrivate"
             name="isPrivate"
             checked={formData.isPrivate}
             onChange={(e) => setFormData(prev => ({ ...prev, isPrivate: e.target.checked }))}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            className="mr-2"
           />
-          <label htmlFor="isPrivate" className="text-sm font-medium text-gray-700">
-            Make this memory private (only visible to you)
-          </label>
+          <label className="text-sm text-gray-700">Make this memory private</label>
         </div>
 
         <button
           type="submit"
-          disabled={isLoading}
-          className={`w-full btn-primary ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={isLoading || isProcessing}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Uploading...' : 'Save Memory'}
+          {isLoading ? 'Adding Memory...' : 'Add Memory'}
         </button>
       </form>
     </div>
